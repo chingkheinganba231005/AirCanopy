@@ -204,8 +204,8 @@ Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-mo
 - [x] Checked which data sources this cloud environment can reach
 - [x] Journal (this file) with the plan
 - [x] Working rules for AI-assisted sessions (`CLAUDE.md`), README, licence, `.gitignore`
-- [ ] Python package skeleton with uv, ruff and pytest
-- [ ] Automatic tests on GitHub (continuous integration)
+- [x] Python package skeleton with uv, ruff and pytest
+- [x] Automatic tests on GitHub (continuous integration)
 
 ### P1 Real-world site
 
@@ -279,6 +279,46 @@ On your own computer all of these will probably work. The code will offer more t
 - The author name and email are stamped on each commit when it is made. They are not checked against your login, which is why they must be set correctly before committing.
 
 **Next.** Working rules, README and licence; then the Python package skeleton and automatic tests.
+
+### 2026-10-23 · Step 2 · The Python package and automatic tests
+
+**Goal.** A proper Python package that can be installed, with a command, tests, a code checker, and tests that run on GitHub every time we push.
+
+**What we did.**
+
+1. Wrote `pyproject.toml`, the file that describes the package: its name, version, licence, which Python it needs, which other packages it depends on, and the settings of our tools.
+2. Created the package folder `src/aircanopy/` with `__init__.py` (marks the folder as a package and holds the version) and `cli.py` (the `aircanopy` command, which will gain subcommands such as `aircanopy site build`).
+3. Wrote three small tests in `tests/test_package.py`.
+4. Ran `uv sync`, which created a private Python environment in `.venv/`, installed everything, and wrote `uv.lock`.
+5. Added `.github/workflows/ci.yml`, which tells GitHub to install the project and run the checks and tests on every push.
+
+**Why.**
+
+- *A package, not loose scripts:* other code (the app, notebooks on Colab, tests) can then `import aircanopy` the same way everywhere.
+- *The `src/` layout:* the code sits in `src/aircanopy/`, not at the top level. Tests then run against the installed package, which catches files that were forgotten in the package.
+- *uv:* a fast tool that creates the environment and installs packages. Its lock file, `uv.lock`, records the exact version of every package, so your computer, GitHub and Colab all get the same versions. `pyproject.toml` only says which versions are acceptable (for example `numpy>=2.1,<3`); the lock file says which ones we actually use.
+- *ruff:* checks the code for common mistakes and formats it the same way every time, so differences between versions show real changes, not spacing.
+- *pytest:* runs every function whose name starts with `test_` and reports which ones fail.
+- *Continuous integration (CI):* a computer at GitHub repeats the checks on every push. If something breaks, we know which commit broke it.
+
+**How.**
+
+```bash
+uv sync                      # create .venv, install the package and the dev tools, write uv.lock
+uv run ruff check .          # look for mistakes
+uv run ruff format --check . # check the formatting (without --check it fixes it)
+uv run pytest                # run the tests
+uv run aircanopy --version   # the command works
+```
+
+`uv run` runs a command inside the project's environment, so you never need to "activate" it.
+
+**What to understand.**
+
+- A *dependency* is someone else's package that ours uses. Every dependency is code we trust, so we keep the list short and check each licence (see `CLAUDE.md`).
+- A *test* is a small program that checks one fact about our code, such as "the command prints its version". Tests are cheap to run and catch mistakes long before a user does. Physics code will get tests against known exact answers.
+
+**Next.** The real-world site builder: coordinates, buildings, terrain, trees and roads for any place.
 
 ---
 
