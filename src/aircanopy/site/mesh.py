@@ -16,6 +16,7 @@ import math
 from pathlib import Path
 
 import numpy as np
+import shapely
 import trimesh
 from shapely.geometry import Polygon
 
@@ -30,9 +31,10 @@ DISPLAY_CROWN_SHARE = 0.6  # crown diameter as a share of the tree height, when 
 DISPLAY_CROWN_DEPTH_SHARE = 0.6  # crown depth as a share of the tree height (at most its width)
 DISPLAY_TRUNK_INTO_CROWN = 0.25  # how far the drawn trunk reaches into the crown, as a share
 
-#: Colours (RGBA, 0-255) by what a building's height is based on, so the picture shows it.
+#: Colours as seen on screen (sRGB, RGBA 0-255). glTF stores linear values; see srgb_to_linear.
+#: Buildings are coloured by what their height is based on, so the picture shows it.
 BUILDING_COLOURS = {
-    "measured": (205, 202, 196, 255),
+    "mapped": (205, 202, 196, 255),
     "levels": (176, 186, 199, 255),
     "estimated": (214, 178, 150, 255),
 }
@@ -53,7 +55,7 @@ def height_basis(b: Building) -> str:
         return "estimated"
     if b.height_source == "osm:levels":
         return "levels"
-    return "measured"
+    return "mapped"
 
 
 def building_mesh(b: Building) -> trimesh.Trimesh | None:
@@ -72,11 +74,18 @@ def _flat(poly: Polygon, z: float) -> trimesh.Trimesh | None:
     return trimesh.Trimesh(verts, faces, process=False)
 
 
-def road_mesh(r: Road, z: float = 0.02) -> trimesh.Trimesh | None:
+def road_mesh(r: Road, z: float = 0.02, clip: Polygon | None = None) -> trimesh.Trimesh | None:
+    """The road's surface as a flat strip, cut to `clip` (the site's square) if given.
+
+    Roads are kept whole in the site model, and some run far beyond the site; drawn whole they
+    would stretch the picture far past the area that is simulated.
+    """
     width = r.width or (r.lanes * DISPLAY_LANE_WIDTH_M if r.lanes else 2 * DISPLAY_LANE_WIDTH_M)
     if r.highway in ("footway", "pedestrian", "path", "steps", "cycleway", "corridor"):
         width = r.width or DISPLAY_FOOTWAY_WIDTH_M
     shape = r.line.buffer(width / 2, cap_style="flat", join_style="round")
+    if clip is not None:
+        shape = shape.intersection(clip)
     parts = [shape] if isinstance(shape, Polygon) else list(getattr(shape, "geoms", []))
     meshes = [m for p in parts if (m := _flat(p, z)) is not None]
     return trimesh.util.concatenate(meshes) if meshes else None
@@ -106,11 +115,32 @@ def ground_mesh(site: Site) -> trimesh.Trimesh:
     return _flat(Polygon([(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)]), 0.0)
 
 
+def srgb_to_linear(rgba: tuple[int, int, int, int]) -> tuple[float, float, float, float]:
+    """A colour as seen on screen (sRGB, 0-255) as the linear values (0-1) that glTF stores.
+
+    glTF's base colour factor is linear, and viewers convert it to sRGB for the screen, so an
+    sRGB colour stored unconverted would look washed out. This is the inverse of the sRGB
+    encoding C' = 12.92 C for C <= 0.0031308, else 1.055 C^(1/2.4) - 0.055 (ICC, "sRGB",
+    https://www.color.org/chardata/rgb/srgb.xalter, accessed 2026-10-23). Alpha stays linear.
+    """
+    knee = 12.92 * 0.0031308
+
+    def channel(c: int) -> float:
+        v = c / 255
+        return v / 12.92 if v <= knee else ((v + 0.055) / 1.055) ** 2.4
+
+    r, g, b, a = rgba
+    return channel(r), channel(g), channel(b), a / 255
+
+
 def _with_material(mesh: trimesh.Trimesh, name: str, rgba: tuple[int, ...]) -> trimesh.Trimesh:
     # One named material per group (not per-face colours, which glTF does not have): smaller
     # files, and a viewer can restyle a whole group by its material name.
     material = trimesh.visual.material.PBRMaterial(
-        name=name, baseColorFactor=rgba, metallicFactor=0.0, roughnessFactor=0.9
+        name=name,
+        baseColorFactor=srgb_to_linear(rgba),
+        metallicFactor=0.0,
+        roughnessFactor=0.9,
     )
     mesh.visual = trimesh.visual.TextureVisuals(material=material)
     return mesh
@@ -122,7 +152,8 @@ def scene(site: Site) -> trimesh.Scene:
     Each group's features are merged into one mesh, so that a large city is a handful of draw
     calls instead of thousands. To still know which feature a triangle belongs to, every vertex
     carries a `_FEATURE_ID` attribute (glTF's form for an application's own per-vertex data),
-    an index into the list of feature ids stored in the mesh's `extras` as `feature_ids`.
+    an index into the list of feature ids stored in the mesh's `extras` as `feature_ids`. The
+    extras also hold the group's name as `group`.
     """
     groups: dict[str, list[tuple[str, trimesh.Trimesh]]] = {}
 
@@ -133,10 +164,11 @@ def scene(site: Site) -> trimesh.Scene:
     add("ground", "ground", ground_mesh(site))
     for b in site.buildings:
         add(f"buildings_{height_basis(b)}", b.id, building_mesh(b))
+    square = shapely.box(*site.extent())
     for r in site.roads:
-        add("roads", r.id, road_mesh(r))
+        add("roads", r.id, road_mesh(r, clip=square))
     for r in site.footways:
-        add("footways", r.id, road_mesh(r, z=0.03))
+        add("footways", r.id, road_mesh(r, z=0.03, clip=square))
     for t in site.trees:
         if (parts := tree_meshes(t)) is not None:
             add("tree_trunks", t.id, parts[0])
@@ -158,7 +190,7 @@ def scene(site: Site) -> trimesh.Scene:
             # 16-bit ones would limit a group to 65 536 features.
             m.vertex_attributes["_FEATURE_ID"] = np.full(len(m.vertices), k, dtype=np.float32)
         mesh = trimesh.util.concatenate([m for _, m in items])
-        mesh.metadata = {"feature_ids": [fid for fid, _ in items]}
+        mesh.metadata = {"group": name, "feature_ids": [fid for fid, _ in items]}
         mesh.apply_transform(Z_UP_TO_Y_UP)
         out.add_geometry(_with_material(mesh, name, colours[name]), node_name=name, geom_name=name)
     return out

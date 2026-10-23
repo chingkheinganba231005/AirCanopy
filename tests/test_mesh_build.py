@@ -13,7 +13,14 @@ from aircanopy.geo import BBox
 from aircanopy.site import build
 from aircanopy.site.fill import NEIGHBOUR_MEDIAN, fill_building_heights
 from aircanopy.site.from_osm import site_from_osm
-from aircanopy.site.mesh import ROAD_COLOUR, building_mesh, export_glb, scene, tree_meshes
+from aircanopy.site.mesh import (
+    ROAD_COLOUR,
+    building_mesh,
+    export_glb,
+    scene,
+    srgb_to_linear,
+    tree_meshes,
+)
 from aircanopy.site.model import Site
 from aircanopy.site.voxel import block_volume, grid_for_site, load_voxels, voxelise_buildings
 from aircanopy.sources import osm
@@ -58,7 +65,7 @@ def test_scene_groups_and_y_up_axes():
     sc = scene(small_site())
     assert set(sc.geometry) == {
         "ground",
-        "buildings_measured",
+        "buildings_mapped",
         "buildings_levels",
         "buildings_estimated",
         "roads",
@@ -67,10 +74,10 @@ def test_scene_groups_and_y_up_axes():
         "tree_crowns",
     }
     # glTF is y-up: building heights end up on the y axis, and north (+y in the site) on -z.
-    measured = sc.geometry["buildings_measured"]
-    assert measured.bounds[1][1] == pytest.approx(10.0)
-    assert measured.bounds[0][2] == pytest.approx(30.0)  # site y from -50 to -30 -> z 30..50
-    assert measured.bounds[1][2] == pytest.approx(50.0)
+    mapped = sc.geometry["buildings_mapped"]
+    assert mapped.bounds[1][1] == pytest.approx(10.0)
+    assert mapped.bounds[0][2] == pytest.approx(30.0)  # site y from -50 to -30 -> z 30..50
+    assert mapped.bounds[1][2] == pytest.approx(50.0)
 
 
 def test_glb_loads_back(tmp_path):
@@ -80,7 +87,20 @@ def test_glb_loads_back(tmp_path):
     assert "buildings_estimated" in loaded.geometry
     material = loaded.geometry["roads"].visual.material
     assert material.name == "roads"
-    assert tuple(material.baseColorFactor) == ROAD_COLOUR
+    # Stored linear, as glTF requires (trimesh keeps colours as 0-255 integers).
+    expected = np.round(np.array(srgb_to_linear(ROAD_COLOUR)) * 255)
+    assert np.abs(material.baseColorFactor - expected).max() <= 1
+
+
+def test_srgb_to_linear():
+    assert srgb_to_linear((0, 0, 0, 255)) == (0.0, 0.0, 0.0, 1.0)
+    assert srgb_to_linear((255, 255, 255, 128))[:3] == pytest.approx((1.0, 1.0, 1.0))
+    # Mid-grey on screen is about 21 % in linear light.
+    assert srgb_to_linear((128, 128, 128, 255))[0] == pytest.approx(0.2158605, abs=1e-6)
+    # The two pieces of the curve meet at the knee.
+    knee = 12.92 * 0.0031308
+    low, high = knee / 12.92, ((knee + 0.055) / 1.055) ** 2.4
+    assert low == pytest.approx(high, rel=1e-4)
 
 
 def test_build_site_folder_from_real_fixture(tmp_path):
@@ -174,11 +194,14 @@ def test_cli_builds_from_a_local_osm_file(tmp_path, capsys):
 
 def test_every_vertex_knows_its_feature(tmp_path):
     site = small_site()
-    site.buildings.append(building("m2", square(60, 60, 10), 20.0))  # a second measured one
+    site.buildings.append(
+        building("m2", square(60, 60, 10), 20.0)
+    )  # a second one with a mapped height
     loaded = trimesh.load(export_glb(site, tmp_path / "scene.glb"))
-    mesh = loaded.geometry["buildings_measured"]
+    mesh = loaded.geometry["buildings_mapped"]
     ids = mesh.metadata["feature_ids"]
     assert ids == ["m", "m2"]
+    assert mesh.metadata["group"] == "buildings_mapped"
     feature = mesh.vertex_attributes["_FEATURE_ID"].ravel().astype(int)
     assert len(feature) == len(mesh.vertices)
     by_id = {b.id: b for b in site.buildings}
@@ -192,3 +215,11 @@ def test_every_vertex_knows_its_feature(tmp_path):
     assert trees.metadata["feature_ids"] == [
         site.trees[0].id
     ]  # the tree without height is not drawn
+
+
+def test_roads_are_drawn_only_inside_the_site():
+    site = small_site()
+    site.roads = [road([(-1000, 0), (1000, 0)], "primary", width=10.0)]
+    xmin, _, xmax, _ = site.extent()
+    roads = scene(site).geometry["roads"]
+    assert roads.bounds[0][0] == pytest.approx(xmin) and roads.bounds[1][0] == pytest.approx(xmax)

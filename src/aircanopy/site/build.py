@@ -5,7 +5,7 @@ A site folder holds:
 - `site.json`: the site model (buildings, trees, roads in local metres, with sources);
 - `scene.glb`: meshes for drawing;
 - `voxels.npz`: the voxel grid for the physics;
-- `summary.json`: counts, how many heights were measured, estimated from storeys or estimated
+- `summary.json`: counts, how many heights were mapped, estimated from storeys or estimated
   from neighbours, and the data sources with their licences.
 """
 
@@ -18,8 +18,9 @@ from pathlib import Path
 from ..geo import BBox
 from ..sources import osm
 from ..sources.cache import sha256_file
-from .fill import NEIGHBOUR_MEDIAN, fill_building_heights
+from .fill import MIN_NEIGHBOURS, NEIGHBOUR_MEDIAN, NEIGHBOUR_RADIUS_M, fill_building_heights
 from .from_osm import site_from_osm
+from .heights import STOREY_HEIGHT_M
 from .mesh import export_glb
 from .model import Site
 from .voxel import grid_for_site, save_voxels, voxelise_buildings
@@ -42,6 +43,11 @@ def summarise(site: Site, dx: float, solid_cells: int, grid_shape: tuple[int, in
         "footways": len(site.footways),
         "skipped": len(site.skipped),
         "voxels": {"dx_m": dx, "shape_zyx": list(grid_shape), "building_cells": solid_cells},
+        # The values behind estimated heights (docs/assumptions.md), so a viewer can show them.
+        "assumptions": {
+            "A-001": {"storey_height_m": STOREY_HEIGHT_M},
+            "A-002": {"radius_m": NEIGHBOUR_RADIUS_M, "min_neighbours": MIN_NEIGHBOURS},
+        },
         "sources": site.sources,
     }
 

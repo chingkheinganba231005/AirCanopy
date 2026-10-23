@@ -30,3 +30,6 @@ ui/dist/
 .DS_Store
 .idea/
 .vscode/
+ui/e2e/.site/
+ui/test-results/
+ui/playwright-report/

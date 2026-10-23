@@ -45,3 +45,6 @@ These rules apply to every working session, human or AI-assisted. The plan, the 
 | Install (development) | `uv sync` |
 | Lint and format check | `uv run ruff check . && uv run ruff format --check .` |
 | Tests | `uv run pytest` |
+| Viewer: install, format check, type check, unit tests | `cd ui && npm ci && npm run format:check && npm run typecheck && npm test` |
+| Viewer: build, then browser tests (screenshots in `ui/test-results/screens/`) | `cd ui && npm run build && npm run e2e` |
+| Open a site in the viewer | `uv run aircanopy view sites/NAME` |

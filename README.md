@@ -22,8 +22,27 @@ uv run aircanopy site build --around 114.1370,22.2840,500 --name hku
 
 This downloads OpenStreetMap data for the area and writes `sites/hku/` with the site model
 (`site.json`), a 3D scene for viewing (`scene.glb`, opens in any glTF viewer), the voxel grid for
-the physics (`voxels.npz`) and a summary that says how many building heights were measured,
+the physics (`voxels.npz`) and a summary that says how many building heights were mapped,
 estimated from storeys or estimated from neighbours (`summary.json`).
+
+To look at the site in 3D, build the viewer once (needs [Node.js](https://nodejs.org/) 22) and open
+it:
+
+```bash
+cd ui && npm ci && npm run build && cd ..
+uv run aircanopy view sites/hku
+```
+
+This starts a small web server on your own computer (127.0.0.1) and opens the viewer in your
+browser. Drag to turn the view, scroll to zoom, right-drag to move; click a building to see its
+height and where that height came from.
+
+To build a site without downloading, from an OpenStreetMap file you already have (for example an
+export from openstreetmap.org):
+
+```bash
+uv run aircanopy site build --osm-file map.osm --name mysite
+```
 
 ## What it will model
 

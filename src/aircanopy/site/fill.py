@@ -19,9 +19,13 @@ import shapely
 from .model import Site
 
 NEIGHBOUR_MEDIAN = "estimated:neighbour-median"
+NEIGHBOUR_RADIUS_M = 100.0  # assumption A-002
+MIN_NEIGHBOURS = 3  # assumption A-002
 
 
-def fill_building_heights(site: Site, radius: float = 100.0, min_neighbours: int = 3) -> int:
+def fill_building_heights(
+    site: Site, radius: float = NEIGHBOUR_RADIUS_M, min_neighbours: int = MIN_NEIGHBOURS
+) -> int:
     """Fill missing building heights from neighbours; returns how many were filled."""
     known = [
         b for b in site.buildings if b.height is not None and b.height_source != NEIGHBOUR_MEDIAN

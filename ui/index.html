@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AirCanopy</title>
+  </head>
+  <body>
+    <canvas id="scene" aria-label="3D view of the site"></canvas>
+    <aside id="panel" aria-label="About this site"></aside>
+    <section id="info" aria-live="polite" hidden></section>
+    <div id="tooltip" role="tooltip" hidden></div>
+    <div id="compass" title="North" aria-hidden="true">
+      <svg viewBox="-26 -26 52 52" width="52" height="52">
+        <circle r="24" fill="rgb(17 22 28 / 0.75)" stroke="rgb(255 255 255 / 0.15)" />
+        <path d="M0 -17 L6 2 L0 -2 L-6 2 Z" fill="#ff6b5a" />
+        <path d="M0 17 L6 -2 L0 2 L-6 -2 Z" fill="#9aa7b2" />
+        <text y="-19" text-anchor="middle" font-size="7" font-weight="700" fill="#e8edf1">N</text>
+      </svg>
+    </div>
+    <footer id="attribution"></footer>
+    <div id="status" role="status">Loading the site…</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

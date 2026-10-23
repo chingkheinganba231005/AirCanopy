@@ -24,3 +24,46 @@ jobs:
         run: uv run ruff format --check .
       - name: Tests
         run: uv run pytest
+
+  viewer:
+    name: Viewer (format, types, tests, build, browser tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install uv
+        run: pip install uv==0.8.17
+      - name: Install the Python project (the browser tests build a site with it)
+        run: uv sync --locked
+      - name: Install the viewer's packages from the lock file
+        run: npm ci
+      - name: Format check
+        run: npm run format:check
+      - name: Type check
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Install the browser for the tests
+        run: npx playwright install --with-deps chromium
+      - name: Browser tests
+        run: npm run e2e
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: viewer-screenshots
+          path: ui/test-results/screens/
+          if-no-files-found: ignore

@@ -222,7 +222,8 @@ Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-mo
 - [x] Meshes and glTF export (`site/mesh.py`)
 - [x] Voxel grid, checked against the exact building volume (`site/voxel.py`, `benchmarks/voxel_volume.py`)
 - [x] Command line: `aircanopy site build` (`site/build.py`, `cli.py`)
-- [ ] 3D viewer
+- [x] 3D viewer: `aircanopy view`, layers, click a building to see where its height came from (`ui/`, `view.py`)
+- [x] Build a site from a local OpenStreetMap file, without downloading (`--osm-file`)
 
 (Later phases are listed in [3.5](#35-phases) and get their own checklists when they start.)
 
@@ -339,7 +340,7 @@ uv run aircanopy --version   # the command works
 6. `site/from_osm.py`: builds a `Site` from OpenStreetMap data.
 7. 37 new tests, using a small real sample from near HKU stored in `tests/data/osm/` (compressed, 111 kB) and small made-up maps written by `tests/osm_builder.py`.
 
-**What the HKU sample showed.** In a 600 m × 440 m box around HKU there were 203 building outlines but only 5 with a measured `height` tag; 171 gave a number of storeys instead. Only 6 trees were mapped. So in Hong Kong most heights must be estimated from storeys, and most trees are missing from OpenStreetMap. Both facts shape the next steps: a second building source (Overture Maps) and a tree source from satellite data (the canopy height map).
+**What the HKU sample showed.** In a 600 m × 440 m box around HKU there were 203 building outlines but only 5 with a `height` tag; 171 gave a number of storeys instead. Only 6 trees were mapped. So in Hong Kong most heights must be estimated from storeys, and most trees are missing from OpenStreetMap. Both facts shape the next steps: a second building source (Overture Maps) and a tree source from satellite data (the canopy height map).
 
 **Why.**
 
@@ -444,6 +445,65 @@ Open `sites/hku/scene.glb` in any program that reads glTF, for example Blender (
 
 **Next.** A 3D viewer that opens a site folder in a browser window, with layers and the source of each building height shown by colour. Then better building heights from Overture Maps, and trees from the canopy height map.
 
+### 2026-10-23 · Step 5 · A 3D viewer for any site
+
+**Goal.** Look at a site in 3D, turn it around, switch kinds of features on and off, and click any building to see its height and where that height came from.
+
+**What we did.**
+
+1. `scene.glb` now remembers which feature each triangle belongs to (see *What to understand*).
+2. `aircanopy site build --osm-file FILE` builds a site from an OpenStreetMap file on disk, with no download. The browser tests use it with the stored HKU sample.
+3. `aircanopy view SITE` (`src/aircanopy/view.py`): a small web server on this computer that serves the viewer and the site folder.
+4. The viewer itself, in `ui/`: TypeScript, drawn with three.js, built with Vite.
+   - Buildings are coloured by where their height came from, with a legend and counts.
+   - Layer switches turn kinds of features on and off.
+   - Hovering over a feature shows a label, and clicking shows a card with its data and a link to it on openstreetmap.org.
+   - The view also has a compass, a sky with shadows, and the "© OpenStreetMap contributors" credit that the data licence requires.
+5. Tests:
+   - 10 unit tests for the viewer's pure functions;
+   - 3 browser tests that open the real viewer, click a building and save screenshots;
+   - Python tests for the server, including that no request can read files outside the two folders it serves.
+6. A second job in continuous integration runs all of the viewer's checks and keeps the screenshots.
+
+**How.**
+
+```bash
+cd ui && npm ci && npm run build && cd ..   # once, and after changing ui/
+uv run aircanopy view sites/hku              # opens http://127.0.0.1:8765/
+```
+
+While working on the viewer, `cd ui && npm run dev` serves it with instant reload; it shows `sites/hku`, or the folder named by `AIRCANOPY_SITE`.
+
+**Why.**
+
+- *A web page, but on your own computer.* Browsers have the best free 3D drawing (WebGL), and three.js is by far the most used library for it: about 14.1 million npm downloads in the week of 12 to 18 October 2026, against 0.23 million for Babylon.js (`docs/sources.md`). Simulations will need a GPU and large files, so the page is served from your computer, not from a public website (decision D-004). The server listens only on 127.0.0.1, an address that only this computer can reach.
+- *Why a server at all?* For safety, a web page may not read files from your disk by itself. The small server hands it the site's files.
+- *TypeScript* is JavaScript with types. It finds many mistakes, such as a misspelt field name or a value that might be missing, before the code runs.
+- *No interface framework yet* (decision D-008). The panel is plain HTML built by a few functions. This is easier to learn from, and we can add a framework if the interface grows.
+- *Colour carries meaning*, so the drawing must not change colours. Two things could: colour spaces and tone mapping (see *What to understand*).
+
+**What to understand.**
+
+- *How a 3D picture is made.* A *scene* holds *meshes* (shapes made of triangles), each with a *material* (colour, how rough or shiny). *Lights* shine on them, and a *camera* looks at them. The *renderer* asks the graphics card to draw what the camera sees. We draw a new picture only when something changes, such as the camera moving, to save power.
+- *Picking*: what did the user click? The viewer sends an invisible ray from the camera through the mouse pointer and finds the first triangle it hits (*ray casting*). All buildings of one colour are merged into one mesh, so the graphics card draws them in one go. So each corner of each triangle carries a feature number (a glTF attribute called `_FEATURE_ID`), and the mesh carries the list of feature ids. Triangle → feature number → id → the building's data in `site.json`.
+- *Colour spaces.* Screens use *sRGB*, where the numbers are spaced to match how eyes see brightness. Light itself adds up *linearly*, so 3D programs do their lighting in linear values. Mid-grey on screen (128 of 255) is only about 21 % of white's light. glTF stores linear colours, so we convert our sRGB colours before saving. Without the conversion every colour came out pale.
+- *Shadow maps.* To find shadows, the renderer first draws the scene from the sun's point of view, keeping only each pixel's distance to the sun. Then, when drawing from the camera, a point is in shadow if something else was closer to the sun along that line.
+- *Tone mapping.* Lit scenes can be brighter than a screen can show. Tone mapping squeezes the range. We use "Khronos PBR Neutral", which keeps colours close to their original values, so the legend still matches the picture.
+- *Browser tests* are a robot that opens the page and clicks, as a person would. They check counts and texts automatically, and save screenshots for a person to look at.
+
+**Problems and fixes.**
+
+1. *npm crashed while installing* ("Cannot read properties of null (reading 'edgesOut')"). This is a bug inside npm, triggered by vitest 5.0.3's long list of optional companion packages. vitest 5.0.5 installs cleanly, so we pinned that.
+2. *three.js r186 removed the soft shadow mode* we asked for (`PCFSoftShadowMap`); it said so in the console, and we switched to `PCFShadowMap`.
+3. *Pale colours*: glTF expects linear colours (above). `srgb_to_linear` in `site/mesh.py` now converts them, using the sRGB formula from the International Color Consortium.
+4. *No shadows to see*: the display sun stood behind the camera, so every shadow fell behind a building. The display sun now comes from the south-east while the camera starts in the south-west. It is not the real sun, and the viewer says so.
+5. *The first click test failed.* On the small sample site, 99 m towers stand on a 200 m square. The camera, placed for the square alone, cut off the tallest roof, so the click went past it. Now the camera moves back step by step (a *binary search*) until every corner of the site's box, tallest building included, is on screen and clear of the panel.
+6. *Roads stretched the picture.* Roads are kept whole in the site model, and some run far outside the site. For drawing they are now cut to the site's square.
+7. *A wording mistake.* We had called OpenStreetMap `height` tags "measured". Volunteers enter them, sometimes from surveys and sometimes as estimates, so the viewer now says "mapped".
+8. *A visible edge of the world.* The ground around the site ended in a curved line against the sky. Making it much larger puts its edge almost on the horizon, where the haze hides it.
+
+**Next.** Better building heights from Overture Maps, trees from the satellite canopy height map, and terrain from the Copernicus elevation model; then phase P2, the 3D wind solver.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -501,6 +561,10 @@ Computer graphics describe surfaces with *triangles*. A *mesh* is a list of corn
 
 *glTF* is the standard file format for 3D scenes, sometimes called "the JPEG of 3D". A `.glb` file is its binary form: one file holding the meshes, their materials (colour, how shiny) and how they are placed. The glTF specification fixes the axes: "+Y as up", in metres. Our site uses x east, y north and z up, so when saving we turn the scene: east stays east (+X), up becomes +Y and north becomes −Z. This is a rotation, not a mirror image (the turned axes are still right-handed), so nothing is drawn back to front.
 
+### 6.9 Light and colour on a screen
+
+A screen pixel's number is not proportional to the light it gives. In *sRGB*, the standard for screens, the numbers are spaced so that equal steps look like equal changes in brightness to our eyes. Mid-grey, 128 out of 255, sends out only about 21 % of the light of white. Physics, including the lighting in a 3D renderer, needs numbers proportional to light (*linear* values), because light from two lamps adds up. So a renderer converts colours to linear values, does its lighting, and converts back to sRGB for the screen. The formula is a short curve published by the International Color Consortium; `srgb_to_linear` in `site/mesh.py` uses it.
+
 (More lessons follow as the project reaches them: wall models, trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---
@@ -516,6 +580,8 @@ Computer graphics describe surfaces with *triangles*. A *mesh* is a list of corn
 | D-005 | Each kind of data has more than one source (for example Overture Maps or OpenStreetMap for buildings) | Services can be blocked or down; open data coverage differs by country |
 | D-006 | Missing values are filled only from the data themselves (for example the median height of neighbouring buildings), labelled, and counted in the site summary; never with one fixed default | A fixed default hides the gap; a labelled estimate shows how much of a result rests on estimates |
 | D-007 | The scene for drawing (meshes) and the grid for the physics (voxels) are both made from the same site model | They can never disagree about where a building is |
+| D-008 | The viewer is plain TypeScript with three.js, built with Vite; no interface framework for now | Small and easy to learn from; three.js is the most used WebGL library; a framework can come later if the panels grow |
+| D-009 | Every package version is pinned exactly, and new versions are taken only after they have been out for about two weeks, unless a fix is needed | A build that worked keeps working; very new releases are where most broken or malicious packages are caught |
 
 ---
 
