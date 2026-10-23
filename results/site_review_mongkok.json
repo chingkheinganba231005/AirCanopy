@@ -1,0 +1,78 @@
+{
+  "what": "share of buildings, footprint area and volume by kind of height; the largest buildings with estimated heights; towers tagged location=podium",
+  "run_at": "2026-10-23T12:35:57Z",
+  "aircanopy": "0.1.0",
+  "site": "mongkok",
+  "site_built": "2026-10-23T12:35:40Z",
+  "osm_file": {
+    "url": "https://api.openstreetmap.org/api/0.6/map?bbox=114.1649575,22.3159003,114.1746635,22.3249309",
+    "accessed": "2026-10-23T12:20:56Z",
+    "sha256": "e656d0bd617318171aa2fbde96ad2fbb575eb69200b4604d4a33e40c3def4de9"
+  },
+  "buildings": 1479,
+  "share_of_buildings": {
+    "measured": 0.0,
+    "mapped": 0.043,
+    "levels": 0.653,
+    "ml": 0.0,
+    "estimated": 0.255,
+    "missing": 0.049
+  },
+  "share_of_footprint_area": {
+    "measured": 0.0,
+    "mapped": 0.046,
+    "levels": 0.633,
+    "ml": 0.0,
+    "estimated": 0.247,
+    "missing": 0.074
+  },
+  "share_of_volume": {
+    "measured": 0.0,
+    "mapped": 0.128,
+    "levels": 0.591,
+    "ml": 0.0,
+    "estimated": 0.281,
+    "missing": 0.0
+  },
+  "largest_estimated": [
+    {
+      "id": "osm:way/37517528",
+      "name": "MOKO",
+      "building": "yes",
+      "footprint_m2": 12167,
+      "height_m": 57.0
+    },
+    {
+      "id": "osm:way/863537430",
+      "name": "Royal Plaza Hotel",
+      "building": "hotel",
+      "footprint_m2": 5507,
+      "height_m": 16.5
+    },
+    {
+      "id": "osm:way/447395238",
+      "name": null,
+      "building": "school",
+      "footprint_m2": 2498,
+      "height_m": 37.5
+    },
+    {
+      "id": "osm:way/388805146",
+      "name": "Fuk Keung Industrial Building",
+      "building": "industrial",
+      "footprint_m2": 1372,
+      "height_m": 21.0
+    },
+    {
+      "id": "osm:way/388805145",
+      "name": null,
+      "building": "commercial",
+      "footprint_m2": 1362,
+      "height_m": 18.0
+    }
+  ],
+  "location_podium": {
+    "buildings": 25,
+    "without_min_level_or_min_height": 15
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "what": "the places the geocoder lists for each name, best first",
+  "run_at": "2026-10-23T12:26:34Z",
+  "aircanopy": "0.1.0",
+  "geocoder": "https://nominatim.openstreetmap.org/search",
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0",
+  "answers": {
+    "University of Hong Kong": [
+      {
+        "name": "Hong-Kong, 81, Feldstraße, Südliche Mühlenvorstadt, Greifswald, Vorpommern-Greifswald, Mecklenburg-Vorpommern, 17489, Germany",
+        "kind": "amenity/fast_food",
+        "osm": "node/310303445",
+        "lat": 54.0855168,
+        "lon": 13.3892808
+      }
+    ],
+    "The University of Hong Kong": [
+      {
+        "name": "The University of Hong Kong, Lee Chung Yin Road, Shek Tong Tsui, Central and Western District, Hong Kong Island, Hong Kong, China",
+        "kind": "amenity/university",
+        "osm": "relation/4246029",
+        "lat": 22.2828768,
+        "lon": 114.1378586
+      }
+    ],
+    "Mong Kok": [
+      {
+        "name": "Mong Kok, Kowloon City flyover, Kau Pui Shek, Ma Tau Wai, Kowloon City District, Kowloon, Hong Kong, China",
+        "kind": "railway/station",
+        "osm": "way/112427969",
+        "lat": 22.319308,
+        "lon": 114.1698076
+      },
+      {
+        "name": "Mong Kok, Yau Tsim Mong District, Kowloon, Hong Kong, China",
+        "kind": "place/suburb",
+        "osm": "node/1295654855",
+        "lat": 22.3204156,
+        "lon": 114.1698105
+      }
+    ]
+  }
+}

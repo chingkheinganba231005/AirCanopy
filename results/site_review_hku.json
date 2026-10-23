@@ -1,0 +1,78 @@
+{
+  "what": "share of buildings, footprint area and volume by kind of height; the largest buildings with estimated heights; towers tagged location=podium",
+  "run_at": "2026-10-23T12:35:57Z",
+  "aircanopy": "0.1.0",
+  "site": "hku",
+  "site_built": "2026-10-23T12:35:34Z",
+  "osm_file": {
+    "url": "https://api.openstreetmap.org/api/0.6/map?bbox=114.1345741,22.2817423,114.1394259,22.2862577",
+    "accessed": "2026-10-23T09:03:55Z",
+    "sha256": "76962682001de831d42d9d8dc75a53f70befe109cb6fbd2c084f34af9d6577ad"
+  },
+  "buildings": 213,
+  "share_of_buildings": {
+    "measured": 0.0,
+    "mapped": 0.0,
+    "levels": 0.723,
+    "ml": 0.0,
+    "estimated": 0.192,
+    "missing": 0.085
+  },
+  "share_of_footprint_area": {
+    "measured": 0.0,
+    "mapped": 0.0,
+    "levels": 0.659,
+    "ml": 0.0,
+    "estimated": 0.172,
+    "missing": 0.169
+  },
+  "share_of_volume": {
+    "measured": 0.0,
+    "mapped": 0.0,
+    "levels": 0.801,
+    "ml": 0.0,
+    "estimated": 0.199,
+    "missing": 0.0
+  },
+  "largest_estimated": [
+    {
+      "id": "osm:way/182023179",
+      "name": "Library Extension",
+      "building": "university",
+      "footprint_m2": 2843,
+      "height_m": 24.0
+    },
+    {
+      "id": "osm:way/182024491",
+      "name": "Kadoorie Biological Sciences Building",
+      "building": "university",
+      "footprint_m2": 1887,
+      "height_m": 30.0
+    },
+    {
+      "id": "osm:way/182172774",
+      "name": "Haking Wong Podium",
+      "building": "yes",
+      "footprint_m2": 1760,
+      "height_m": 30.0
+    },
+    {
+      "id": "osm:way/182172765",
+      "name": "Composite Building",
+      "building": "university",
+      "footprint_m2": 1127,
+      "height_m": 24.0
+    },
+    {
+      "id": "osm:way/131575737",
+      "name": "St. Anthony's Church",
+      "building": "yes",
+      "footprint_m2": 938,
+      "height_m": 37.5
+    }
+  ],
+  "location_podium": {
+    "buildings": 6,
+    "without_min_level_or_min_height": 4
+  }
+}

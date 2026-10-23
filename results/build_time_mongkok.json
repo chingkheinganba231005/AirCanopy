@@ -1,0 +1,48 @@
+{
+  "what": "time to build a site with nothing cached (cold) and from the cache (warm)",
+  "run_at": "2026-10-23T12:27:15Z",
+  "aircanopy": "0.1.0",
+  "machine": {
+    "cpus": 4,
+    "system": "Linux",
+    "python": "3.12.3"
+  },
+  "build_args": [
+    "--place",
+    "Mong Kok",
+    "--pick",
+    "2",
+    "--size",
+    "1000"
+  ],
+  "runs": {
+    "cold": {
+      "seconds": 27.8,
+      "downloaded_bytes": 11436600
+    },
+    "warm": {
+      "seconds": 10.4
+    }
+  },
+  "site": {
+    "size_m": [
+      1000.0,
+      1000.0
+    ],
+    "buildings": 1479,
+    "trees": 139,
+    "voxels_shape_zyx": [
+      131,
+      501,
+      501
+    ]
+  },
+  "file_bytes": {
+    "canopy.npz": 53958,
+    "scene.glb": 4354344,
+    "site.json": 1722153,
+    "summary.json": 5158,
+    "terrain.npz": 157527,
+    "voxels.npz": 427993
+  }
+}
