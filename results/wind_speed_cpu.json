@@ -1,16 +1,5 @@
 {
   "what": "cell updates per second of the regularised Smagorinsky step with walls, force and free-slip top",
-  "run_at": "2026-10-23T13:29:09Z",
-  "aircanopy": "0.1.0",
-  "jax": "0.11.2",
-  "device": {
-    "platform": "cpu",
-    "kind": "cpu"
-  },
-  "machine": {
-    "cpus": 4,
-    "system": "Linux"
-  },
   "runs": [
     {
       "lattice": "D3Q19",
@@ -24,7 +13,18 @@
       "population_bytes_per_cell": 76,
       "finite": true,
       "copy_seconds": 0.0026,
-      "step_seconds": 0.01901
+      "step_seconds": 0.01901,
+      "run_at": "2026-10-23T13:29:09Z",
+      "aircanopy": "0.1.0",
+      "jax": "0.11.2",
+      "device": {
+        "platform": "cpu",
+        "kind": "cpu"
+      },
+      "machine": {
+        "cpus": 4,
+        "system": "Linux"
+      }
     },
     {
       "lattice": "D3Q19",
@@ -38,7 +38,18 @@
       "population_bytes_per_cell": 152,
       "finite": true,
       "copy_seconds": 0.01598,
-      "step_seconds": 0.03755
+      "step_seconds": 0.03755,
+      "run_at": "2026-10-23T13:29:09Z",
+      "aircanopy": "0.1.0",
+      "jax": "0.11.2",
+      "device": {
+        "platform": "cpu",
+        "kind": "cpu"
+      },
+      "machine": {
+        "cpus": 4,
+        "system": "Linux"
+      }
     },
     {
       "lattice": "D3Q27",
@@ -52,7 +63,18 @@
       "population_bytes_per_cell": 108,
       "finite": true,
       "copy_seconds": 0.00326,
-      "step_seconds": 0.02525
+      "step_seconds": 0.02525,
+      "run_at": "2026-10-23T13:29:09Z",
+      "aircanopy": "0.1.0",
+      "jax": "0.11.2",
+      "device": {
+        "platform": "cpu",
+        "kind": "cpu"
+      },
+      "machine": {
+        "cpus": 4,
+        "system": "Linux"
+      }
     },
     {
       "lattice": "D3Q27",
@@ -66,7 +88,18 @@
       "population_bytes_per_cell": 216,
       "finite": true,
       "copy_seconds": 0.04157,
-      "step_seconds": 0.05167
+      "step_seconds": 0.05167,
+      "run_at": "2026-10-23T13:29:09Z",
+      "aircanopy": "0.1.0",
+      "jax": "0.11.2",
+      "device": {
+        "platform": "cpu",
+        "kind": "cpu"
+      },
+      "machine": {
+        "cpus": 4,
+        "system": "Linux"
+      }
     },
     {
       "lattice": "D3Q19",
@@ -80,7 +113,18 @@
       "population_bytes_per_cell": 76,
       "finite": true,
       "copy_seconds": 0.00358,
-      "step_seconds": 0.04032
+      "step_seconds": 0.04032,
+      "run_at": "2026-10-23T13:29:09Z",
+      "aircanopy": "0.1.0",
+      "jax": "0.11.2",
+      "device": {
+        "platform": "cpu",
+        "kind": "cpu"
+      },
+      "machine": {
+        "cpus": 4,
+        "system": "Linux"
+      }
     },
     {
       "lattice": "D3Q19",
@@ -94,7 +138,18 @@
       "population_bytes_per_cell": 152,
       "finite": true,
       "copy_seconds": 0.01679,
-      "step_seconds": 0.08576
+      "step_seconds": 0.08576,
+      "run_at": "2026-10-23T13:29:09Z",
+      "aircanopy": "0.1.0",
+      "jax": "0.11.2",
+      "device": {
+        "platform": "cpu",
+        "kind": "cpu"
+      },
+      "machine": {
+        "cpus": 4,
+        "system": "Linux"
+      }
     }
   ]
 }

@@ -191,3 +191,14 @@ class Solver:
             u = [u[a] - 0.5 * self.params.g[a] for a in range(3)]
         fluid = ~self.solid
         return np.where(fluid, rho, 1.0), tuple(np.where(fluid, c, 0.0) for c in u)
+
+    def mean_kinetic_energy(self) -> float:
+        """Mean of rho |u|^2 / 2 over the air cells, computed where the state lives (on the
+        graphics card, with JAX), so that only one number is copied back."""
+        xp, f, fluid = self.xp, self.f, self.cfg["fluid"]
+        rho = lbm.moment(f, [1] * self.lat.q)
+        u = [lbm.moment(f, self.lat.c[:, a]) / rho for a in range(3)]
+        if self.params.g is not None:
+            u = [u[a] - 0.5 * self.params.g[a] for a in range(3)]
+        e = 0.5 * rho * (u[0] * u[0] + u[1] * u[1] + u[2] * u[2])
+        return float(xp.sum(xp.where(fluid, e, 0.0)) / xp.sum(fluid))

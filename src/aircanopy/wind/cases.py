@@ -166,6 +166,65 @@ def taylor_green(
     }
 
 
+def taylor_green_3d(
+    lat: VelocitySet,
+    n: int,
+    reynolds: float = 1600.0,
+    mach: float = 0.1,
+    smagorinsky: float = 0.0,
+    t_end: float = 20.0,
+    samples_per_tc: int = 10,
+    backend: str = "jax",
+    dtype=np.float32,
+) -> dict:
+    """The 3D Taylor-Green vortex of the High-Order CFD Workshop (problem C3.5).
+
+    A periodic box of side 2 pi L holds n cells, so L = n / (2 pi) cells. At the start
+        u = V0 sin(x/L) cos(y/L) cos(z/L),  v = -V0 cos(x/L) sin(y/L) cos(z/L),  w = 0,
+        p = p0 + rho0 V0^2 / 16 (cos(2x/L) + cos(2y/L)) (cos(2z/L) + 2),
+    with Re = V0 L / nu and V0 = mach * c_s. The vortices stretch and break into turbulence; the
+    rate at which they lose kinetic energy peaks near t = 9 L / V0. Returns the mean kinetic
+    energy, divided by V0^2, sampled `samples_per_tc` times per time unit L / V0.
+    """
+    length = n / (2 * math.pi)
+    v0 = mach * math.sqrt(CS2)
+    nu = v0 * length / reynolds
+    tau = 0.5 + nu / CS2
+    tc = length / v0  # steps per time unit
+    centres = (np.arange(n) + 0.5 - n / 2) / length
+    z, y, x = np.meshgrid(centres, centres, centres, indexing="ij")
+    u = v0 * np.sin(x) * np.cos(y) * np.cos(z)
+    v = -v0 * np.cos(x) * np.sin(y) * np.cos(z)
+    p = v0**2 / 16 * (np.cos(2 * x) + np.cos(2 * y)) * (np.cos(2 * z) + 2)
+    params = Params(tau0=tau, smagorinsky=smagorinsky)
+    s = Solver(lat, np.zeros((n, n, n), bool), params, backend, dtype)
+    s.set_flow(1.0 + p / CS2, (u, v, np.zeros_like(u)))
+    every = max(1, round(tc / samples_per_tc))
+    total = round(t_end * tc)
+    steps, energy = [0], [s.mean_kinetic_energy() / v0**2]
+    while steps[-1] < total:
+        s.run(every)
+        steps.append(steps[-1] + every)
+        energy.append(s.mean_kinetic_energy() / v0**2)
+    return {
+        "n": n,
+        "lattice": lat.name,
+        "reynolds": reynolds,
+        "mach": mach,
+        "smagorinsky": smagorinsky,
+        "tau": tau,
+        "steps_per_time_unit": tc,
+        "times": [k / tc for k in steps],
+        "energy": energy,
+    }
+
+
+def dissipation(times: list[float], energy: list[float]) -> list[float]:
+    """-dE/dt by central differences (one-sided at the two ends)."""
+    t, e = np.asarray(times), np.asarray(energy)
+    return list(-np.gradient(e, t))
+
+
 def observed_order(sizes: list[int], errors: list[float]) -> list[float]:
     """Order of convergence between successive grids: log(e1 / e2) / log(n2 / n1)."""
     return [

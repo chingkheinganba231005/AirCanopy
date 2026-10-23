@@ -7,7 +7,8 @@ JAX finds one). The first call is timed separately: it includes compiling. For c
 D3Q19 also runs with the direction-by-direction collision (lbm.collide), and each run records
 how long one plain read and write of all the packets takes, the floor no step can beat.
 
-Writes results/wind_speed_<device>.json.
+Adds the runs to results/wind_speed_<device>.json, replacing earlier runs of the same
+lattice, precision, collision and box size.
 
     uv run python benchmarks/wind_speed.py [n]
 """
@@ -103,17 +104,20 @@ def main(n: int = 64, steps: int = 200) -> None:
         r["copy_seconds"] = round(copy_time(LATTICES[r["lattice"]], np.dtype(r["dtype"]), n), 5)
         r["step_seconds"] = round(r["seconds"] / r["steps"], 5)
         print(r)
+    run_at = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for r in runs:
+        r.update(run_at=run_at, aircanopy=__version__, jax=jax.__version__)
+        r["device"] = {"platform": device.platform, "kind": device.device_kind}
+        r["machine"] = {"cpus": os.cpu_count(), "system": platform.system()}
+    path = ROOT / "results" / f"wind_speed_{device.platform}.json"
+    key = lambda r: (r["lattice"], r["dtype"], r["collision"], r["cells"])  # noqa: E731
+    old = json.loads(path.read_text())["runs"] if path.is_file() else []
+    new_keys = {key(r) for r in runs}
     out = {
         "what": "cell updates per second of the regularised Smagorinsky step with walls, force "
         "and free-slip top",
-        "run_at": dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "aircanopy": __version__,
-        "jax": jax.__version__,
-        "device": {"platform": device.platform, "kind": device.device_kind},
-        "machine": {"cpus": os.cpu_count(), "system": platform.system()},
-        "runs": runs,
+        "runs": [r for r in old if "run_at" in r and key(r) not in new_keys] + runs,
     }
-    path = ROOT / "results" / f"wind_speed_{device.platform}.json"
     path.write_text(json.dumps(out, indent=2) + "\n")
     print(f"wrote {path}")
 
