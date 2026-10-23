@@ -5,6 +5,14 @@
   outline is not considered for 3D rendering" (https://wiki.openstreetmap.org/wiki/Simple_3D_Buildings,
   accessed 2026-10-23). So when an outline has parts inside it, the parts are used and the
   outline is left out, and the same volume is not counted twice.
+- Underground buildings are skipped: `location=underground` is "Used where a feature is mainly
+  under ground" (https://wiki.openstreetmap.org/wiki/Key:location, revision 3100870, accessed
+  2026-10-23). The model is of the air above the ground; drawn on the surface, an underground
+  station becomes a wall the wind would have to go round.
+- Open roofs are skipped for now: `building=roof`, and `building:part=roof`, which is "A
+  permanent roof structure without vertical walls that forms part of a building"
+  (https://wiki.openstreetmap.org/wiki/Tag:building:part%3Droof, revision 3058073, accessed
+  2026-10-23). As solid blocks they would put walls where air flows under the roof.
 - Trees: nodes tagged `natural=tree`, with height, crown diameter, trunk circumference, species
   and leaf type when mapped.
 - Roads: ways whose `highway` value is a road for vehicles; footways and other paths are kept
@@ -153,7 +161,10 @@ def buildings_from_osm(data: OsmData, frame: LocalFrame, skipped: list[dict]) ->
     tree = shapely.STRtree([f[1].representative_point() for f in parts]) if parts else None
     out = []
     for fid, poly, tags, is_part in feats:
-        if tags.get("building") == "roof" and not is_part:
+        if tags.get("location") == "underground":
+            skipped.append({"id": fid, "reason": "underground (the model is above the ground)"})
+            continue
+        if tags.get("building:part" if is_part else "building") == "roof":
             skipped.append({"id": fid, "reason": "open roof structure (not modelled yet)"})
             continue
         if not is_part and tree is not None and len(tree.query(poly, predicate="contains")):

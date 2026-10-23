@@ -32,8 +32,14 @@ def synthetic_site() -> Site:
     # An outline with one detailed part inside: only the part is kept.
     b.ring(square(-50, 20, 20), {"building": "yes", "building:levels": "2"})
     b.ring(square(-45, 25, 10), {"building:part": "yes", "height": "25", "min_height": "5"})
-    # An open roof (petrol-station canopy): skipped and reported.
+    # An open roof (petrol-station canopy) and a roof part: skipped and reported.
     b.ring(square(60, -60, 10), {"building": "roof"})
+    b.ring(square(60, 40, 10), {"building:part": "roof", "height": "6"})
+    # An underground station: skipped and reported.
+    b.ring(
+        square(-80, -80, 40),
+        {"building": "train_station", "location": "underground", "layer": "-2", "height": "3"},
+    )
     # A tree, a road and a footway.
     b.node(0, -20, {"natural": "tree", "height": "9", "diameter_crown": "6", "genus": "Ficus"})
     b.way([b.node(-80, 0), b.node(80, 0)], {"highway": "primary", "lanes": "4", "width": "14"})
@@ -59,7 +65,12 @@ def test_buildings_with_heights_holes_and_parts():
     assert len(court.footprint.interiors) == 1
     part = next(b for b in site.buildings if b.part)
     assert (part.height, part.base) == (25, 5)
-    assert any("roof" in s["reason"] for s in site.skipped)
+    reasons = sorted(s["reason"] for s in site.skipped)
+    assert reasons == [
+        "open roof structure (not modelled yet)",
+        "open roof structure (not modelled yet)",
+        "underground (the model is above the ground)",
+    ]
 
 
 def test_trees_and_roads():

@@ -10,6 +10,21 @@ Early development. AirCanopy is a rebuild of [Trees vs Breath](https://github.co
 
 The plan, the progress and a step-by-step explanation of how everything is built are in [`JOURNAL.md`](JOURNAL.md).
 
+## Try it
+
+Needs Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv sync
+# A 500 m square around a point (longitude, latitude, size in metres):
+uv run aircanopy site build --around 114.1370,22.2840,500 --name hku
+```
+
+This downloads OpenStreetMap data for the area and writes `sites/hku/` with the site model
+(`site.json`), a 3D scene for viewing (`scene.glb`, opens in any glTF viewer), the voxel grid for
+the physics (`voxels.npz`) and a summary that says how many building heights were measured,
+estimated from storeys or estimated from neighbours (`summary.json`).
+
 ## What it will model
 
 - 3D wind through real buildings and terrain, at real scale (large-eddy simulation with the lattice Boltzmann method)

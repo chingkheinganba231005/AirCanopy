@@ -15,6 +15,9 @@ checked. Anything that could not be checked is marked `UNVERIFIED`.
 | --- | --- | --- |
 | The `map` call accepts at most 0.25 square degrees | `https://api.openstreetmap.org/api/0.6/capabilities`, element `area maximum="0.25"` | 2026-10-23 |
 | Meaning of `height`, `min_height`, `building:levels`, `building:min_level`, `roof:levels`, `roof:height`; parts replace the outline in 3D | OpenStreetMap wiki, "Simple 3D Buildings", `https://wiki.openstreetmap.org/wiki/Simple_3D_Buildings` (revision 3106809) | 2026-10-23 |
+| `location=underground` marks a feature that is "mainly under ground"; such buildings are left out | OpenStreetMap wiki, "Key:location", `https://wiki.openstreetmap.org/wiki/Key:location` (revision 3100870) | 2026-10-23 |
+| `building:part=roof` is "A permanent roof structure without vertical walls that forms part of a building" | OpenStreetMap wiki, "Tag:building:part=roof", `https://wiki.openstreetmap.org/wiki/Tag:building:part%3Droof` (revision 3058073) | 2026-10-23 |
+| glTF axes and units: "glTF uses a right-handed coordinate system", "glTF defines +Y as up", "The units for all linear distances are meters" | Khronos glTF 2.0 Specification, source `https://github.com/KhronosGroup/glTF/blob/main/specification/2.0/Specification.adoc` (section "Coordinate System and Units"). The rendered page on registry.khronos.org was behind a bot check, so the source file was read instead | 2026-10-23 |
 | Highway classes for vehicles and for walking | OpenStreetMap wiki, "Key:highway", `https://wiki.openstreetmap.org/wiki/Key:highway` | UNVERIFIED (not yet read for this project) |
 
 ## Software

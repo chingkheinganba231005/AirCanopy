@@ -1,0 +1,35 @@
+{
+  "what": "building volume on the voxel grid against the exact block volume",
+  "run_at": "2026-10-23T09:07:18Z",
+  "aircanopy": "0.1.0",
+  "fixture": "tests/data/osm/hku_small.osm.gz",
+  "fixture_sha256": "d9c4593ce8ef5c257b514cf35b37070db7acd2756e411f5afa62eda9a6dbb5a0",
+  "buildings": 23,
+  "exact_volume_m3": 107929.0,
+  "cell_sizes": [
+    {
+      "dx_m": 0.5,
+      "building_cells": 862650,
+      "voxel_volume_m3": 107831.2,
+      "relative_error": -0.00091
+    },
+    {
+      "dx_m": 1.0,
+      "building_cells": 108037,
+      "voxel_volume_m3": 108037.0,
+      "relative_error": 0.001
+    },
+    {
+      "dx_m": 2.0,
+      "building_cells": 13556,
+      "voxel_volume_m3": 108448.0,
+      "relative_error": 0.00481
+    },
+    {
+      "dx_m": 4.0,
+      "building_cells": 1627,
+      "voxel_volume_m3": 104128.0,
+      "relative_error": -0.03522
+    }
+  ]
+}

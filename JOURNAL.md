@@ -217,9 +217,11 @@ Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-mo
 - [x] Trees from OpenStreetMap (position, height, crown, species when mapped)
 - [ ] Trees from the canopy height map (to fill heights and find unmapped trees)
 - [x] Roads and footways from OpenStreetMap (class, lanes, width when mapped)
-- [ ] Meshes and glTF export
-- [ ] Voxel grid
-- [ ] Command line: `aircanopy site build`
+- [x] Missing building heights estimated from neighbours, and labelled (`site/fill.py`)
+- [x] Underground buildings and open roofs left out, and listed (`site/from_osm.py`)
+- [x] Meshes and glTF export (`site/mesh.py`)
+- [x] Voxel grid, checked against the exact building volume (`site/voxel.py`, `benchmarks/voxel_volume.py`)
+- [x] Command line: `aircanopy site build` (`site/build.py`, `cli.py`)
 - [ ] 3D viewer
 
 (Later phases are listed in [3.5](#35-phases) and get their own checklists when they start.)
@@ -375,6 +377,73 @@ print(len(site.buildings), site.buildings[0].height, site.buildings[0].height_so
 
 **Next.** Meshes for drawing, a voxel grid for the physics, and the `aircanopy site build` command.
 
+### 2026-10-23 · Step 4 · From map data to a 3D scene and a voxel grid
+
+**Goal.** Turn the site model into the two forms the project needs, a 3D scene to look at and a grid of cubes for the physics, and make one command that does everything for any box on Earth.
+
+**What we did.**
+
+1. `site/fill.py`: gives a building with no height the median height of the buildings around it, and labels it `estimated:neighbour-median` (assumption A-002).
+2. `site/voxel.py`: the voxel grid (see [6.5](#65-grids-and-voxels)). Each cell is air (0) or building (1). `block_volume` computes the exact volume of the buildings, to check the grid.
+3. `site/mesh.py`: triangle meshes of buildings, roads, footways, trees and the ground, saved as one glTF file, `scene.glb` (see [6.8](#68-triangle-meshes-and-gltf)).
+4. `site/build.py` and `cli.py`: the command `aircanopy site build`, which downloads the data, builds the site and writes the site folder.
+5. Two fixes to the OpenStreetMap reader, found by looking at the first real result (see *Problems and fixes*).
+6. `benchmarks/voxel_volume.py`: measures how close the grid's building volume is to the exact volume, for four cell sizes, and writes `results/voxel_volume.json`.
+7. 22 new tests (62 in total).
+
+**The first real site.** The command
+
+```bash
+uv run aircanopy site build --around 114.1370,22.2840,500 --name hku
+```
+
+took about 3 seconds and wrote `sites/hku/` (not stored in git; anyone can rebuild it with the same command). Its summary is saved in `results/site_hku.json`. In the 500 m square around HKU:
+
+- 199 buildings: 154 heights from storey counts, 32 estimated from neighbours, 13 still without a height (these are left out of the grid and counted in the summary). The tallest is 114 m.
+- 6 trees, none with a mapped height, so none is drawn yet. Trees need the satellite canopy height map.
+- 133 roads and 381 footways.
+- 10 features left out and listed with the reason.
+- A grid of 251 × 251 × 57 cells of 2 m: about 3.6 million cells, of which 264 199 are inside buildings.
+
+**Why.**
+
+- *Two forms of the same site.* A mesh describes surfaces exactly; it is the right form for drawing and, later, for tracing sun rays. The wind solver needs the voxel form instead: it works on a grid where every cell is either air or solid. Both are made from the same site model, so they always agree.
+- *The cell-centre rule.* A cell counts as building if its centre is inside the footprint, at or above the base and below the top. Walls then fall on cell faces and look like stairs (see [6.5](#65-grids-and-voxels)). The check in `results/voxel_volume.json` shows the error shrinking as the cells get smaller: +0.5 % at 2 m cells and −3.5 % at 4 m, against the exact volume of the 23 sample buildings.
+- *Fill gaps from the data, never with one fixed number.* Giving every unknown building, say, 10 m would hide the gap. The median of the neighbours is often close in a street of similar buildings, and every such height is labelled and counted.
+- *glTF.* It is the standard 3D file format that browsers, Blender and most 3D tools read, so the scene can be checked with any viewer, not only ours.
+- *Display-only sizes.* A road without a mapped width still has to be drawn somehow. Such values are named `DISPLAY_*`, listed in `docs/assumptions.md`, and never read by the physics.
+
+**How.**
+
+```python
+from aircanopy.site.model import Site
+from aircanopy.site.voxel import grid_for_site, voxelise_buildings, block_volume
+
+site = Site.load("sites/hku/site.json")
+grid = grid_for_site(site, dx=2.0)  # box, cell size, number of cells
+solid = voxelise_buildings(site, grid)  # numpy array [z, y, x] of 0 and 1
+print(grid.shape, solid.sum() * 2.0**3, block_volume(site.buildings))
+```
+
+Open `sites/hku/scene.glb` in any program that reads glTF, for example Blender (File → Import → glTF 2.0), to see the buildings in 3D. Our own viewer comes next.
+
+**What to understand.**
+
+- An *extrusion* makes a 3D block from a flat outline by pushing it up; that is how each building becomes a mesh. The outline's top and bottom must be cut into triangles first (*triangulation*); we use the earcut method, which handles courtyards.
+- An *off-by-one error* is a mistake in where a range starts or ends. Our first version filled 11 layers for a building from 5 m to 25 m on 2 m cells instead of 10. The fix: count a cell when its centre is at or above the bottom and *below* the top (a *half-open* range). Then two parts stacked on each other never claim the same cell.
+- To compute the exact volume of overlapping blocks, cut them into horizontal slices at every base and top. In each slice the shape is the same at every height, so its volume is the area of the footprints combined times the slice's thickness.
+- *Look at the output.* The tests passed, yet the first top-down picture of the grid showed a strange network of thin, low "buildings". Tests check what we thought of; pictures show what we did not.
+
+**Problems and fixes.**
+
+1. *An underground station drawn on the street.* The network of thin shapes was HKU MTR station: tagged `location=underground`, `layer=-2`, it had been drawn as an 8 159 m² block 3 m tall at street level. In the wind simulation it would have been a wall where there is none. Buildings tagged `location=underground` are now left out, with the reason recorded. The meaning of the tag is from the OpenStreetMap wiki (`docs/sources.md`).
+2. *Roof-only parts drawn as solid columns.* Five `building:part=roof` pieces (roofs without walls) were drawn as solid blocks from the ground. They are now left out like `building=roof` until roofs are modelled as thin raised slabs.
+3. *Colours in glTF.* Saving one colour per triangle made the export library convert them to colours per corner, which needs an extra package. One named *material* per group (buildings, roads, trees) is the normal glTF way, keeps the file smaller and lets the viewer restyle a whole group, so we switched to that.
+4. *A repeat mistake.* `shapely.points` does not accept a list of point objects; the same mistake was fixed in step 3. `shapely.centroid` applied to the whole list of footprints gives the centres directly.
+5. *A test with walls exactly through cell centres.* A point on the edge of a polygon does not count as inside, so a wall exactly through a row of cell centres leaves that row out. Real map data never line up exactly with the grid, so this only matters in tests; the test now puts its walls on cell faces.
+
+**Next.** A 3D viewer that opens a site folder in a browser window, with layers and the source of each building height shown by colour. Then better building heights from Overture Maps, and trees from the canopy height map.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -410,6 +479,8 @@ Density and velocity come from adding up the packets. It can be shown that, on a
 
 A *voxel* is a small cube, the 3D version of a pixel. Our site becomes a 3D grid of voxels, each marked as air, building, ground or tree crown. The size of a voxel is the *resolution*. Smaller voxels show more detail but cost more memory and time: halving the voxel size makes 8 times as many voxels and, because the time step also halves, about 16 times the work.
 
+To turn a building into voxels we test the centre of each cell: inside the footprint and between the base and the top means "building". Walls that run at an angle to the grid become staircases, and each wall can be off by up to half a cell. Over a whole building these errors mostly cancel, and they shrink as the cells get smaller. That is easy to measure (`benchmarks/voxel_volume.py`), so we do not have to guess which cell size is good enough for volume. For the wind, the cell size needed is a separate question that phase P2 answers with its own tests.
+
 ### 6.6 Coordinates: from latitude and longitude to metres
 
 Maps give positions as latitude and longitude, angles on a round Earth. Physics needs flat distances in metres. For an area of a few kilometres we can flatten the Earth around the centre of the site, like laying a flat sheet on a ball where it touches. This is a *local projection*. We use the standard library pyproj to do it correctly, including the slightly flattened shape of the Earth.
@@ -424,6 +495,12 @@ Map data come in two main forms:
 OpenStreetMap stores *nodes* (points with a latitude and longitude), *ways* (ordered lists of nodes: a line, or a closed ring when the first node equals the last) and *relations* (groups of ways, used for example for a building with a courtyard: one outer ring and one inner ring). Anything can carry *tags*, pairs such as `building=school` or `height=24`. Tags are added by volunteers, so they are rich in some places and missing in others, and every tool that uses them must cope with gaps.
 
 
+### 6.8 Triangle meshes and glTF
+
+Computer graphics describe surfaces with *triangles*. A *mesh* is a list of corner points (vertices) and a list of triangles, each given by three vertex numbers. Any surface can be approximated this way: a box needs 12 triangles, a round tree crown a few hundred. Graphics cards are built to draw millions of triangles per second.
+
+*glTF* is the standard file format for 3D scenes, sometimes called "the JPEG of 3D". A `.glb` file is its binary form: one file holding the meshes, their materials (colour, how shiny) and how they are placed. The glTF specification fixes the axes: "+Y as up", in metres. Our site uses x east, y north and z up, so when saving we turn the scene: east stays east (+X), up becomes +Y and north becomes −Z. This is a rotation, not a mirror image (the turned axes are still right-handed), so nothing is drawn back to front.
+
 (More lessons follow as the project reaches them: wall models, trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---
@@ -437,6 +514,8 @@ OpenStreetMap stores *nodes* (points with a latitude and longitude), *ways* (ord
 | D-003 | Work on the `main` branch of the new repository | The repository was created empty for this project; there is no one else's work to protect yet |
 | D-004 | Python engine with a local 3D app opened in a browser window, not a public website | 3D physics needs a GPU and large memory, which a public web page cannot rely on; browser graphics are still the best free 3D toolkit |
 | D-005 | Each kind of data has more than one source (for example Overture Maps or OpenStreetMap for buildings) | Services can be blocked or down; open data coverage differs by country |
+| D-006 | Missing values are filled only from the data themselves (for example the median height of neighbouring buildings), labelled, and counted in the site summary; never with one fixed default | A fixed default hides the gap; a labelled estimate shows how much of a result rests on estimates |
+| D-007 | The scene for drawing (meshes) and the grid for the physics (voxels) are both made from the same site model | They can never disagree about where a building is |
 
 ---
 
