@@ -17,6 +17,7 @@ from pathlib import Path
 
 from ..geo import BBox
 from ..sources import osm
+from ..sources.cache import sha256_file
 from .fill import NEIGHBOUR_MEDIAN, fill_building_heights
 from .from_osm import site_from_osm
 from .mesh import export_glb
@@ -61,8 +62,36 @@ def build_from_osm_data(
     return summary
 
 
-def build_site(name: str, bbox: BBox, out: Path, dx: float = 2.0, refresh: bool = False) -> dict:
-    """Download (or reuse) OpenStreetMap data for the box and build the site folder."""
-    download = osm.fetch_map(bbox, refresh=refresh)
-    data = osm.parse(download.path)
-    return build_from_osm_data(name, bbox, data, out, dx, [download.record()])
+def build_site(
+    name: str,
+    bbox: BBox | None,
+    out: Path,
+    dx: float = 2.0,
+    refresh: bool = False,
+    osm_file: Path | None = None,
+) -> dict:
+    """Build the site folder from OpenStreetMap data.
+
+    The data are downloaded for `bbox` (or reused from the cache), or read from `osm_file`, an
+    OpenStreetMap XML file (`.osm` or `.osm.gz`) such as an export from openstreetmap.org. With a
+    file and no box, the box is the file's own bounds.
+    """
+    if osm_file is None:
+        if bbox is None:
+            raise ValueError("give a box, or an OpenStreetMap file")
+        download = osm.fetch_map(bbox, refresh=refresh)
+        data = osm.parse(download.path)
+        return build_from_osm_data(name, bbox, data, out, dx, [download.record()])
+    data = osm.parse(osm_file)
+    bbox = bbox or data.bounds
+    if bbox is None:
+        raise ValueError(f"{osm_file} has no <bounds> element; give the box with --bbox")
+    source = {
+        "path": str(osm_file),
+        "bytes": osm_file.stat().st_size,
+        "sha256": sha256_file(osm_file),
+        "licence": osm.LICENCE,
+        "attribution": osm.ATTRIBUTION,
+        "note": "local OpenStreetMap file supplied by the user",
+    }
+    return build_from_osm_data(name, bbox, data, out, dx, [source])

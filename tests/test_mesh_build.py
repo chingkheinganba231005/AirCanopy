@@ -122,11 +122,15 @@ def test_cli_parses_both_ways_of_giving_an_area():
     b = parser.parse_args(["site", "build", "--bbox", "114.13,22.28,114.14,22.29", "--name", "x"])
     assert cli._box(b).as_tuple() == (114.13, 22.28, 114.14, 22.29)
     with pytest.raises(SystemExit):
-        parser.parse_args(["site", "build", "--name", "x"])
+        parser.parse_args(
+            ["site", "build", "--bbox", "1,2,3,4", "--around", "1,2,3", "--name", "x"]
+        )
+    with pytest.raises(SystemExit):
+        cli.main(["site", "build", "--name", "x"])  # no area at all
 
 
 def test_cli_site_build_writes_the_folder(tmp_path, monkeypatch, capsys):
-    def fake_build_site(name, bbox, out, dx=2.0, refresh=False):
+    def fake_build_site(name, bbox, out, dx=2.0, refresh=False, osm_file=None):
         return build.build_from_osm_data(name, bbox, osm.parse(FIXTURE), out, dx, [])
 
     monkeypatch.setattr(build, "build_site", fake_build_site)
@@ -150,3 +154,41 @@ def test_cli_site_build_writes_the_folder(tmp_path, monkeypatch, capsys):
     printed = capsys.readouterr().out
     assert '"dx_m": 4.0' in printed
     assert np.load(out / "voxels.npz")["dx"].item() == 4.0
+
+
+def test_cli_builds_from_a_local_osm_file(tmp_path, capsys):
+    out = tmp_path / "local"
+    assert (
+        cli.main(
+            ["site", "build", "--osm-file", str(FIXTURE), "--name", "local", "--out", str(out)]
+        )
+        == 0
+    )
+    summary = json.loads((out / "summary.json").read_text())
+    (source,) = summary["sources"]
+    assert source["sha256"] == "d9c4593ce8ef5c257b514cf35b37070db7acd2756e411f5afa62eda9a6dbb5a0"
+    assert source["licence"] == "ODbL-1.0"
+    # No box given: the file's own bounds are used.
+    assert summary["bbox"] == list(osm.parse(FIXTURE).bounds.as_tuple())
+
+
+def test_every_vertex_knows_its_feature(tmp_path):
+    site = small_site()
+    site.buildings.append(building("m2", square(60, 60, 10), 20.0))  # a second measured one
+    loaded = trimesh.load(export_glb(site, tmp_path / "scene.glb"))
+    mesh = loaded.geometry["buildings_measured"]
+    ids = mesh.metadata["feature_ids"]
+    assert ids == ["m", "m2"]
+    feature = mesh.vertex_attributes["_FEATURE_ID"].ravel().astype(int)
+    assert len(feature) == len(mesh.vertices)
+    by_id = {b.id: b for b in site.buildings}
+    for k, fid in enumerate(ids):
+        # Back from glTF's y-up axes: site x = X, site y = -Z.
+        xy = mesh.vertices[feature == k][:, [0, 2]] * [1, -1]
+        assert len(xy)
+        footprint = by_id[fid].footprint
+        assert shapely.covers(footprint.buffer(1e-3), shapely.points(xy)).all()
+    trees = loaded.geometry["tree_crowns"]
+    assert trees.metadata["feature_ids"] == [
+        site.trees[0].id
+    ]  # the tree without height is not drawn

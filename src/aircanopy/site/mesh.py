@@ -117,24 +117,30 @@ def _with_material(mesh: trimesh.Trimesh, name: str, rgba: tuple[int, ...]) -> t
 
 
 def scene(site: Site) -> trimesh.Scene:
-    """One named mesh per kind of feature, in glTF's y-up axes."""
-    groups: dict[str, list[trimesh.Trimesh]] = {}
+    """One named mesh per kind of feature, in glTF's y-up axes.
 
-    def add(name: str, mesh: trimesh.Trimesh | None) -> None:
+    Each group's features are merged into one mesh, so that a large city is a handful of draw
+    calls instead of thousands. To still know which feature a triangle belongs to, every vertex
+    carries a `_FEATURE_ID` attribute (glTF's form for an application's own per-vertex data),
+    an index into the list of feature ids stored in the mesh's `extras` as `feature_ids`.
+    """
+    groups: dict[str, list[tuple[str, trimesh.Trimesh]]] = {}
+
+    def add(name: str, fid: str, mesh: trimesh.Trimesh | None) -> None:
         if mesh is not None and len(mesh.faces):
-            groups.setdefault(name, []).append(mesh)
+            groups.setdefault(name, []).append((fid, mesh))
 
-    add("ground", ground_mesh(site))
+    add("ground", "ground", ground_mesh(site))
     for b in site.buildings:
-        add(f"buildings_{height_basis(b)}", building_mesh(b))
+        add(f"buildings_{height_basis(b)}", b.id, building_mesh(b))
     for r in site.roads:
-        add("roads", road_mesh(r))
+        add("roads", r.id, road_mesh(r))
     for r in site.footways:
-        add("footways", road_mesh(r, z=0.03))
+        add("footways", r.id, road_mesh(r, z=0.03))
     for t in site.trees:
         if (parts := tree_meshes(t)) is not None:
-            add("tree_trunks", parts[0])
-            add("tree_crowns", parts[1])
+            add("tree_trunks", t.id, parts[0])
+            add("tree_crowns", t.id, parts[1])
 
     colours = {
         "ground": GROUND_COLOUR,
@@ -145,8 +151,14 @@ def scene(site: Site) -> trimesh.Scene:
         **{f"buildings_{k}": v for k, v in BUILDING_COLOURS.items()},
     }
     out = trimesh.Scene()
-    for name, meshes in groups.items():
-        mesh = trimesh.util.concatenate(meshes)
+    for name, items in groups.items():
+        for k, (_, m) in enumerate(items):
+            # float32 holds whole numbers exactly up to 2**24 (16.7 million features). The glTF
+            # specification advises against 32-bit unsigned integers for vertex attributes, and
+            # 16-bit ones would limit a group to 65 536 features.
+            m.vertex_attributes["_FEATURE_ID"] = np.full(len(m.vertices), k, dtype=np.float32)
+        mesh = trimesh.util.concatenate([m for _, m in items])
+        mesh.metadata = {"feature_ids": [fid for fid, _ in items]}
         mesh.apply_transform(Z_UP_TO_Y_UP)
         out.add_geometry(_with_material(mesh, name, colours[name]), node_name=name, geom_name=name)
     return out
