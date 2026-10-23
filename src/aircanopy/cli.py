@@ -1,7 +1,11 @@
 """The `aircanopy` command.
 
+aircanopy place "The University of Hong Kong"
+aircanopy site build --place "The University of Hong Kong" --size 500 --name hku
 aircanopy site build --around 114.1370,22.2840,500 --name hku
 aircanopy site build --bbox 114.1335,22.2820,114.1395,22.2860 --name hku --dx 2
+aircanopy site build --osm-file export.osm --name mysite
+aircanopy view sites/hku
 """
 
 from __future__ import annotations
@@ -38,6 +42,13 @@ def build_parser() -> argparse.ArgumentParser:
     where = build.add_mutually_exclusive_group()
     where.add_argument("--bbox", help="west,south,east,north in degrees")
     where.add_argument("--around", help="lon,lat,size: a square of `size` metres around a point")
+    where.add_argument("--place", help='a place name, for example "The University of Hong Kong"')
+    build.add_argument(
+        "--pick", type=int, default=1, help="with --place: which place found to use (default 1)"
+    )
+    build.add_argument(
+        "--size", type=float, default=500.0, help="with --place: side of the square in metres"
+    )
     build.add_argument(
         "--osm-file",
         type=Path,
@@ -73,6 +84,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="read canopy heights from this GeoTIFF instead of downloading the map",
     )
 
+    place = sub.add_parser("place", help="find a place by name (OpenStreetMap's geocoder)")
+    place.add_argument("query", help='for example "The University of Hong Kong"')
+    place.add_argument("--limit", type=int, default=5, help="how many places to list")
+
     view = sub.add_parser("view", help="open a site in the 3D viewer")
     view.add_argument("site_dir", type=Path, help="a site folder made by `aircanopy site build`")
     view.add_argument("--port", type=int, default=8765, help="port (default 8765; 0 = any free)")
@@ -83,6 +98,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     view.add_argument("--no-browser", action="store_true", help="do not open a browser")
     return parser
+
+
+def _print_places(query: str, places: list, used: int | None = None) -> None:
+    from .sources.geocode import endpoint
+
+    licence = places[0].licence if places else ""
+    print(f'Places found for "{query}" ({endpoint()}; {licence}):')
+    for k, p in enumerate(places, start=1):
+        mark = "   <- used" if k == used else ""
+        print(f"  {k}. {p.name} ({p.lat:.5f}, {p.lon:.5f}) {p.kind}{mark}")
+    if not places:
+        print("  none")
+
+
+def _place_box(args: argparse.Namespace) -> tuple[BBox, dict]:
+    """The square around the chosen place, and a record of how it was found."""
+    from .sources.geocode import LICENCE, endpoint, search
+
+    places = search(args.place)
+    if not places or not 1 <= args.pick <= len(places):
+        _print_places(args.place, places)
+        raise SystemExit(f"--pick {args.pick}: choose one of the {len(places)} places listed")
+    chosen = places[args.pick - 1]
+    _print_places(args.place, places, args.pick)
+    record = {
+        "geocoder": endpoint(),
+        "query": args.place,
+        "pick": args.pick,
+        "place": chosen.to_dict(),
+        "licence": LICENCE,
+        "attribution": chosen.licence,
+    }
+    return BBox.around(chosen.lon, chosen.lat, args.size), record
 
 
 def _view(args: argparse.Namespace) -> int:
@@ -126,12 +174,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "site" and args.site_command == "build":
         from .site.build import build_site
 
-        if not (args.bbox or args.around or args.osm_file):
-            parser.error("site build needs --bbox, --around or --osm-file")
+        if not (args.bbox or args.around or args.place or args.osm_file):
+            parser.error("site build needs --place, --around, --bbox or --osm-file")
+        box, found = _place_box(args) if args.place else (_box(args), None)
         out = args.out or Path("sites") / args.name
         summary = build_site(
             args.name,
-            _box(args),
+            box,
             out,
             dx=args.dx,
             refresh=args.refresh,
@@ -141,10 +190,15 @@ def main(argv: list[str] | None = None) -> int:
             terrain_file=args.terrain_file,
             use_canopy=False if args.no_canopy else None,
             canopy_file=args.canopy_file,
+            extra_sources=[found] if found else None,
         )
         shown = {k: v for k, v in summary.items() if k not in ("sources", "credits")}
         print(json.dumps(shown, indent=2))
         print(f"wrote {out}/site.json, scene.glb, voxels.npz, summary.json")
+    if args.command == "place":
+        from .sources.geocode import search
+
+        _print_places(args.query, search(args.query, limit=args.limit))
     if args.command == "view":
         return _view(args)
     return 0

@@ -296,6 +296,7 @@ def build_site(
     terrain_file: Path | None = None,
     use_canopy: bool | None = None,
     canopy_file: Path | None = None,
+    extra_sources: list[dict] | None = None,
 ) -> dict:
     """Build the site folder.
 
@@ -310,13 +311,16 @@ def build_site(
 
     Trees come from the canopy height map when downloading (unless `use_canopy` is False) or
     from `canopy_file`, joined with the trees in OpenStreetMap.
+
+    `extra_sources` are added to the site's list of sources (for example, how a place name was
+    turned into coordinates).
     """
     if osm_file is None:
         if bbox is None:
             raise ValueError("give a box, or an OpenStreetMap file")
         download = osm.fetch_map(bbox, refresh=refresh)
         data = osm.parse(download.path)
-        records = [download.record()]
+        records = [*(extra_sources or []), download.record()]
         table, status = None, None
         if use_overture:
             try:
@@ -346,6 +350,7 @@ def build_site(
     if bbox is None:
         raise ValueError(f"{osm_file} has no <bounds> element; give the box with --bbox")
     records = [
+        *(extra_sources or []),
         {
             "path": str(osm_file),
             "bytes": osm_file.stat().st_size,
@@ -353,7 +358,7 @@ def build_site(
             "licence": osm.LICENCE,
             "attribution": osm.ATTRIBUTION,
             "note": "local OpenStreetMap file supplied by the user",
-        }
+        },
     ]
     terrain, record, note = load_terrain(bbox, terrain_model or "flat", terrain_file, refresh)
     if record:
