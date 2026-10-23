@@ -91,6 +91,8 @@ export class Viewer {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     this.controls.maxPolarAngle = MathUtils.degToRad(86); // stay above the ground
+    // On a 1 km site the building you want is rarely at the centre: zoom towards the pointer.
+    this.controls.zoomToCursor = true;
     this.controls.addEventListener("change", () => this.requestRender());
 
     this.addSky();
