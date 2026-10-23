@@ -235,6 +235,62 @@ Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-mo
 
 P1 is done: its exit check is met (Step 9).
 
+### P2 3D wind
+
+**Goal.** A 3D wind solver that runs on one graphics card, checked first against flows whose answers are known exactly, then against wind-tunnel measurements, before it is used on a real place.
+
+**How it will work.**
+
+- *Method.* The lattice Boltzmann method ([6.4](#64-the-lattice-boltzmann-method)) with large-eddy simulation ([6.3](#63-turbulence-and-large-eddy-simulation-les)), in JAX, written by us (D-015). Each step is written once against an "array module", so it runs with NumPy (slow, easy to inspect) or with JAX (compiled for the processor or the graphics card). The two must agree to round-off, as they did in Trees vs Breath.
+- *What comes from Trees vs Breath*, where it was tested in 2D: the regularised collision (Latt and Chopard 2006), which stays stable when the viscosity is tiny; the Smagorinsky turbulence model with the strain rate read from the packets themselves, without finite differences; the Guo forcing for body forces; the implicit drag of porous crowns (needed in P3); absorbing layers that stop sound waves bouncing between the boundaries; and streaming built from array shifts, because gathers are slow on processors. Each piece is ported to 3D with its tests.
+- *Why 3D changes the physics, not only the picture.* In two dimensions turbulence passes energy to ever larger eddies instead of breaking them into smaller ones (Kraichnan 1967). A 2D model therefore gets the mixing in a street wrong in kind, not just in amount.
+- *Real scale.* With 2 m cells, the viscosity of air is far too small to matter for the eddies the grid can see. What matters is the turbulence model, and the thin layer of air against every surface, which no city-scale grid can resolve. So walls get a *wall model*: the law of the wall for rough surfaces gives the friction from the wind speed in the first cell and the surface's roughness length. This is where the real Reynolds number enters the simulation.
+- *Lattice.* D3Q19 (19 directions per cell) needs about 30 % less memory than D3Q27 (27 directions); D3Q27 treats all directions more evenly, which matters for some collision models in strong turbulence. Both will be written; the tests and the speed measurement decide.
+- *Wind direction.* The site is turned so that the wind always blows along the grid's x axis, and the buildings are put into voxels in the turned frame.
+- *Units.* The solver works in lattice units (cell size 1, time step 1). A small module converts metres and seconds, and refuses settings that break the method's limits, such as a flow too fast for the lattice (Krüger et al. 2017).
+
+**Checklist.**
+
+*The core*
+
+- [ ] Velocity sets D3Q19 and D3Q27, checked against the conditions their weights must satisfy
+- [ ] Units: physical to lattice and back, with the checks above
+- [ ] The 3D step, ported from the 2D one: equilibrium, streaming by shifts, regularised collision, Smagorinsky, Guo forcing; NumPy and JAX agree
+- [ ] Walls: halfway bounce-back on solid voxels; free-slip; periodic sides
+
+*Tests with exact answers*
+
+- [ ] A decaying shear wave decays at the rate its viscosity predicts
+- [ ] Poiseuille flow between two plates: the exact parabola, with errors falling at second order as the grid is refined
+- [ ] The Taylor–Green vortex: its exact decay at low Reynolds number; at Reynolds number 1600, its turbulent decay against the reference simulations (Brachet et al. 1983)
+- [ ] Speed on the container's processor (cell updates per second): D3Q19 against D3Q27, 32-bit against 64-bit numbers; choose the lattice
+
+*Real scale*
+
+- [ ] Open boundaries: velocity inlet, outflow, absorbing layers
+- [ ] Wall model for rough surfaces (law of the wall with a roughness length)
+- [ ] A neutral atmospheric boundary layer over rough ground: the mean wind follows the logarithmic law and stays the same along the domain
+- [ ] Turbulent inflow for real sites (a separate run of the boundary layer feeding the inlet, or synthetic eddies), chosen by test
+
+*Validation, and a first real run on a graphics card*
+
+- [ ] Flow around a cube on the floor of a channel, against wind-tunnel measurements (Martinuzzi and Tropea 1993; Hussein and Martinuzzi 1996), with the pass criteria written down from the papers before the run
+- [ ] A Colab notebook that runs the large cases on a graphics card and records what it ran; speed on the graphics card
+- [ ] Wind through the HKU site from one direction: mean wind speed 1.5 m above the ground, and streamlines, in the viewer, labelled *simulated*
+- [ ] Phase review
+
+**Exit check** ([3.5](#35-phases)): the tests with exact answers converge at second order and fall within tolerances written down before they are run; the cube matches the measurements within their stated uncertainty, or the gap is measured, explained and recorded.
+
+**Reading list.** Each is read, and recorded in `docs/sources.md`, when the step that uses it starts:
+
+- Krüger, Kusumaatmaja, Kuzmin, Shardt, Silva and Viggen 2017, *The Lattice Boltzmann Method: Principles and Practice* (Springer): velocity sets, units, boundaries, forcing.
+- Latt and Chopard 2006 (regularised collision); Malaspinas 2015 (recursive regularisation); Geier, Schönherr, Pasquali and Krafczyk 2015 (cumulant collision).
+- Hou, Sterling, Chen and Doolen 1996 (Smagorinsky model in lattice Boltzmann); Nicoud and Ducros 1999 (the WALE model).
+- Malaspinas and Sagaut 2014 (a wall model for lattice Boltzmann large-eddy simulation).
+- Brachet et al. 1983 (Taylor–Green vortex); Kraichnan 1967 (turbulence in two dimensions).
+- Martinuzzi and Tropea 1993; Hussein and Martinuzzi 1996 (flow around a cube).
+- Ataei and Salehipour 2024, XLB, a lattice Boltzmann library in JAX (Apache-2.0), to compare results and speed.
+
 (Later phases are listed in [3.5](#35-phases) and get their own checklists when they start.)
 
 ---
@@ -907,6 +963,7 @@ A *geocoder* turns a name or an address into coordinates (*reverse geocoding* tu
 | D-012 | Ground from GEDTM30 (bare earth) by default; Copernicus GLO-30 only as a fallback that is labelled a surface model; level ground only when asked or when no model can be read, and then said | A surface model puts the ground on roofs and treetops in cities; the label keeps that from passing unnoticed |
 | D-013 | A place found by name is never used silently: every candidate is listed, the one used is marked, and the name typed, the pick and the place are stored with the site | Names are ambiguous: "University of Hong Kong" found a restaurant in Germany. A silent wrong pick would build the wrong place |
 | D-014 | Storeys are counted from the ground, as the OpenStreetMap wiki defines `building:levels`, also for towers tagged with the undocumented `location=podium`; the site review counts those towers | The documented rule is the only one others can check; counting the cases shows how much depends on it |
+| D-015 | The wind solver is our own, in JAX, ported piece by piece from the tested 2D solver of Trees vs Breath; existing libraries such as XLB are used only to compare results and speed | The later phases put their own physics inside the same step (porous crowns, wall models, pollutants, heat and buoyancy); a step written once for NumPy and JAX can be checked line by line; and the owner wants to learn how a solver works |
 | D-009 | Every package version is pinned exactly, and new versions are taken only after they have been out for about two weeks, unless a fix is needed | A build that worked keeps working; very new releases are where most broken or malicious packages are caught |
 
 ---
