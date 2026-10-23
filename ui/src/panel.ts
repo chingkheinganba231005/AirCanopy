@@ -4,6 +4,7 @@ import {
   centreText,
   count,
   footprintSourceText,
+  groundText,
   heightSourceText,
   metres,
   osmUrl,
@@ -62,7 +63,7 @@ export function renderPanel(
       box,
       swatch,
       h("span", { class: "layer-label" }, layer.label),
-      h("span", { class: "num" }, count(layer.drawn)),
+      h("span", { class: "num" }, layer.key === "site_outline" ? "" : count(layer.drawn)),
     );
   };
   const byKey = (k: string) => layers.filter((l) => l.key.startsWith(k));
@@ -125,6 +126,7 @@ export function renderPanel(
         ...byKey("roads").map(layerRow),
         ...byKey("footways").map(layerRow),
         ...byKey("trees").map(layerRow),
+        ...byKey("site_outline").map(layerRow),
         summary.trees > summary.trees_with_height &&
           h(
             "p",
@@ -133,6 +135,13 @@ export function renderPanel(
               "height. Trees without a height are not drawn yet; tree heights from satellite " +
               "data come in a later step.",
           ),
+      ),
+      h(
+        "section",
+        {},
+        h("h2", {}, "Ground"),
+        h("p", {}, groundText(summary.terrain)),
+        summary.terrain?.note && h("p", { class: "note" }, summary.terrain.note),
       ),
       h(
         "section",
@@ -208,6 +217,10 @@ export function renderInfo(
         ),
         row("Outline from", footprintSourceText(b.footprint_source)),
         row("Base", metres(b.base)),
+        row(
+          "Stands on",
+          b.ground == null ? "level ground" : `ground ${metres(b.ground)} above sea level`,
+        ),
         row("Footprint", `${count(polygonArea(b.footprint))} m²`),
         row("Type", b.kind),
       );

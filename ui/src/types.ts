@@ -21,6 +21,7 @@ export interface BuildingRecord {
   part: boolean;
   footprint_source?: string; // "osm", or "overture:<dataset>"
   height_dataset?: string | null; // for a height from Overture: the dataset that gave it
+  ground?: number | null; // lowest ground under the footprint, m above the geoid
 }
 
 export interface TreeRecord {
@@ -101,6 +102,16 @@ export interface SummaryJson {
   footprint_sources?: Record<string, number>;
   overture?: { release?: string; error?: string; added?: number } | null;
   credits?: { dataset: string; credit: string; licence: string; buildings: number }[];
+  terrain?: {
+    model: string;
+    kind: string;
+    vertical_datum: string;
+    grid_m: number;
+    ground_min_m: number | null;
+    ground_max_m: number | null;
+    std_mean_m: number | null;
+    note?: string;
+  } | null;
   sources: SourceRecord[];
 }
 

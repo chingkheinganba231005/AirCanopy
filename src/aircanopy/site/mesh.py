@@ -22,6 +22,7 @@ from shapely.geometry import Polygon
 
 from .heights import height_kind
 from .model import Building, Road, Site, Tree
+from .terrain import Terrain, flat
 
 # Picture-only sizes for features the data do not size (see the module docstring).
 DISPLAY_LANE_WIDTH_M = 3.0
@@ -30,6 +31,9 @@ DISPLAY_TRUNK_RADIUS_M = 0.15
 DISPLAY_CROWN_SHARE = 0.6  # crown diameter as a share of the tree height, when not mapped
 DISPLAY_CROWN_DEPTH_SHARE = 0.6  # crown depth as a share of the tree height (at most its width)
 DISPLAY_TRUNK_INTO_CROWN = 0.25  # how far the drawn trunk reaches into the crown, as a share
+DISPLAY_ROAD_LIFT_M = 0.15  # roads drawn this far above the ground, so it does not show through
+DISPLAY_FOOTWAY_LIFT_M = 0.2
+DISPLAY_OUTLINE_WIDTH_M = 3.0  # width of the band that marks the edge of the simulated area
 
 #: Colours as seen on screen (sRGB, RGBA 0-255). glTF stores linear values; see srgb_to_linear.
 #: Buildings are coloured by what their height is based on, so the picture shows it.
@@ -45,6 +49,7 @@ FOOTWAY_COLOUR = (150, 150, 146, 255)
 GROUND_COLOUR = (120, 132, 110, 255)
 CROWN_COLOUR = (62, 122, 66, 255)
 TRUNK_COLOUR = (96, 72, 52, 255)
+OUTLINE_COLOUR = (255, 176, 0, 255)
 
 Z_UP_TO_Y_UP = np.array(
     [[1, 0, 0, 0], [0, 0, 1, 0], [0, -1, 0, 0], [0, 0, 0, 1]],
@@ -58,23 +63,33 @@ def height_basis(b: Building) -> str:
 
 
 def building_mesh(b: Building) -> trimesh.Trimesh | None:
+    """A block from the building's base to its top, standing on its ground."""
     if b.height is None or b.height <= b.base:
         return None
     mesh = trimesh.creation.extrude_polygon(b.footprint, b.height - b.base, engine="earcut")
-    mesh.apply_translation((0.0, 0.0, b.base))
+    mesh.apply_translation((0.0, 0.0, (b.ground or 0.0) + b.base))
     return mesh
 
 
-def _flat(poly: Polygon, z: float) -> trimesh.Trimesh | None:
+def _draped(poly: Polygon, terrain: Terrain, lift: float) -> trimesh.Trimesh | None:
+    """A flat shape laid on the ground: its outline is sampled every quarter grid step, so the
+    triangles follow the slopes."""
     if poly.is_empty or poly.area <= 0:
         return None
-    verts2, faces = trimesh.creation.triangulate_polygon(poly, engine="earcut")
-    verts = np.column_stack([verts2, np.full(len(verts2), z)])
-    return trimesh.Trimesh(verts, faces, process=False)
+    dense = shapely.segmentize(poly, terrain.dx / 4)
+    verts2, faces = trimesh.creation.triangulate_polygon(dense, engine="earcut")
+    z = terrain.at(verts2[:, 0], verts2[:, 1]) + lift
+    return trimesh.Trimesh(np.column_stack([verts2, z]), faces, process=False)
 
 
-def road_mesh(r: Road, z: float = 0.02, clip: Polygon | None = None) -> trimesh.Trimesh | None:
-    """The road's surface as a flat strip, cut to `clip` (the site's square) if given.
+def _parts(shape) -> list[Polygon]:
+    return [shape] if isinstance(shape, Polygon) else list(getattr(shape, "geoms", []))
+
+
+def road_mesh(
+    r: Road, terrain: Terrain, clip: Polygon | None = None, lift: float = DISPLAY_ROAD_LIFT_M
+) -> trimesh.Trimesh | None:
+    """The road's surface on the ground, cut to `clip` (the site's square) if given.
 
     Roads are kept whole in the site model, and some run far beyond the site; drawn whole they
     would stretch the picture far past the area that is simulated.
@@ -85,8 +100,7 @@ def road_mesh(r: Road, z: float = 0.02, clip: Polygon | None = None) -> trimesh.
     shape = r.line.buffer(width / 2, cap_style="flat", join_style="round")
     if clip is not None:
         shape = shape.intersection(clip)
-    parts = [shape] if isinstance(shape, Polygon) else list(getattr(shape, "geoms", []))
-    meshes = [m for p in parts if (m := _flat(p, z)) is not None]
+    meshes = [m for p in _parts(shape) if (m := _draped(p, terrain, lift)) is not None]
     return trimesh.util.concatenate(meshes) if meshes else None
 
 
@@ -94,6 +108,7 @@ def tree_meshes(t: Tree) -> tuple[trimesh.Trimesh, trimesh.Trimesh] | None:
     """Trunk and crown of a tree with a known height; None if the height is unknown."""
     if t.height is None or t.height <= 0:
         return None
+    ground = t.ground or 0.0
     diameter = t.crown_diameter or DISPLAY_CROWN_SHARE * t.height
     crown_height = min(t.height * DISPLAY_CROWN_DEPTH_SHARE, diameter)
     base = t.height - crown_height
@@ -102,16 +117,26 @@ def tree_meshes(t: Tree) -> tuple[trimesh.Trimesh, trimesh.Trimesh] | None:
     )
     trunk_top = base + DISPLAY_TRUNK_INTO_CROWN * crown_height
     trunk = trimesh.creation.cylinder(radius=radius, height=trunk_top, sections=10)
-    trunk.apply_translation((t.x, t.y, trunk_top / 2))
+    trunk.apply_translation((t.x, t.y, ground + trunk_top / 2))
     crown = trimesh.creation.icosphere(subdivisions=2, radius=1.0)
     crown.apply_scale((diameter / 2, diameter / 2, crown_height / 2))
-    crown.apply_translation((t.x, t.y, base + crown_height / 2))
+    crown.apply_translation((t.x, t.y, ground + base + crown_height / 2))
     return trunk, crown
 
 
-def ground_mesh(site: Site) -> trimesh.Trimesh:
-    xmin, ymin, xmax, ymax = site.extent()
-    return _flat(Polygon([(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)]), 0.0)
+def ground_mesh(terrain: Terrain) -> trimesh.Trimesh:
+    """The ground surface: the terrain's grid points joined by its triangles."""
+    xs, ys = terrain.nodes()
+    xx, yy = np.meshgrid(xs, ys)
+    verts = np.column_stack([xx.ravel(), yy.ravel(), terrain.elevation.ravel().astype(float)])
+    return trimesh.Trimesh(verts, terrain.faces(), process=False)
+
+
+def outline_mesh(site: Site, terrain: Terrain) -> trimesh.Trimesh | None:
+    """A band on the ground just inside the edge of the site: the area that is simulated."""
+    square = shapely.box(*site.extent())
+    band = square.difference(square.buffer(-DISPLAY_OUTLINE_WIDTH_M, join_style="mitre"))
+    return _draped(band, terrain, DISPLAY_FOOTWAY_LIFT_M + 0.05)
 
 
 def srgb_to_linear(rgba: tuple[int, int, int, int]) -> tuple[float, float, float, float]:
@@ -145,7 +170,7 @@ def _with_material(mesh: trimesh.Trimesh, name: str, rgba: tuple[int, ...]) -> t
     return mesh
 
 
-def scene(site: Site) -> trimesh.Scene:
+def scene(site: Site, terrain: Terrain | None = None) -> trimesh.Scene:
     """One named mesh per kind of feature, in glTF's y-up axes.
 
     Each group's features are merged into one mesh, so that a large city is a handful of draw
@@ -160,14 +185,16 @@ def scene(site: Site) -> trimesh.Scene:
         if mesh is not None and len(mesh.faces):
             groups.setdefault(name, []).append((fid, mesh))
 
-    add("ground", "ground", ground_mesh(site))
+    terrain = terrain or flat(site.extent())
+    add("ground", "ground", ground_mesh(terrain))
+    add("site_outline", "site_outline", outline_mesh(site, terrain))
     for b in site.buildings:
         add(f"buildings_{height_basis(b)}", b.id, building_mesh(b))
     square = shapely.box(*site.extent())
     for r in site.roads:
-        add("roads", r.id, road_mesh(r, clip=square))
+        add("roads", r.id, road_mesh(r, terrain, clip=square))
     for r in site.footways:
-        add("footways", r.id, road_mesh(r, z=0.03, clip=square))
+        add("footways", r.id, road_mesh(r, terrain, clip=square, lift=DISPLAY_FOOTWAY_LIFT_M))
     for t in site.trees:
         if (parts := tree_meshes(t)) is not None:
             add("tree_trunks", t.id, parts[0])
@@ -175,6 +202,7 @@ def scene(site: Site) -> trimesh.Scene:
 
     colours = {
         "ground": GROUND_COLOUR,
+        "site_outline": OUTLINE_COLOUR,
         "roads": ROAD_COLOUR,
         "footways": FOOTWAY_COLOUR,
         "tree_trunks": TRUNK_COLOUR,
@@ -195,7 +223,7 @@ def scene(site: Site) -> trimesh.Scene:
     return out
 
 
-def export_glb(site: Site, path: Path) -> Path:
+def export_glb(site: Site, path: Path, terrain: Terrain | None = None) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(scene(site).export(file_type="glb"))
+    path.write_bytes(scene(site, terrain).export(file_type="glb"))
     return path

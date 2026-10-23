@@ -3,6 +3,7 @@ import {
   centreText,
   count,
   footprintSourceText,
+  groundText,
   heightSourceText,
   metres,
   osmUrl,
@@ -120,5 +121,24 @@ describe("records", () => {
       ["open roof", 2],
       ["underground", 1],
     ]);
+  });
+});
+
+describe("ground", () => {
+  it("describes the elevation model in one sentence", () => {
+    const t = {
+      model: "gedtm30",
+      kind: "terrain",
+      vertical_datum: "EGM2008",
+      grid_m: 20,
+      ground_min_m: 24.5,
+      ground_max_m: 155.6,
+      std_mean_m: 3.1,
+    };
+    expect(groundText(t)).toBe(
+      "From the GEDTM30 terrain model: 25 to 156 m above sea level, typically within ±3.1 m.",
+    );
+    expect(groundText(null)).toMatch(/^Level ground/);
+    expect(groundText({ ...t, model: "flat" })).toMatch(/^Level ground/);
   });
 });

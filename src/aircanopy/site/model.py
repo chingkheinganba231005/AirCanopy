@@ -1,9 +1,10 @@
 """The site model: what a real place contains, in local metres.
 
-Positions are in the site's LocalFrame (x east, y north, metres). Heights are above the local
-ground. Every value that came from data says which tag or dataset it came from, and every value
-that is missing stays missing (None) instead of being filled with a guess; later steps decide
-how to fill gaps and label what they filled.
+Positions are in the site's LocalFrame (x east, y north, metres). Heights of buildings and trees
+are above their ground; `ground` is that ground's elevation above the geoid (site/terrain.py).
+Every value that came from data says which tag or dataset it came from, and every value that is
+missing stays missing (None) instead of being filled with a guess; later steps decide how to
+fill gaps and label what they filled.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ class Building:
     part: bool = False  # True for a building:part (one piece of a more detailed building)
     footprint_source: str = "osm"  # "osm", or "overture:<dataset>" for an Overture footprint
     height_dataset: str | None = None  # for a height from Overture: the dataset that gave it
+    ground: float | None = None  # lowest ground under the footprint, m above the geoid
 
 
 @dataclass
@@ -48,6 +50,7 @@ class Tree:
     leaf_cycle: str | None  # "evergreen" or "deciduous"
     height_source: str
     crown_source: str
+    ground: float | None = None  # ground at the trunk, m above the geoid
 
 
 @dataclass
@@ -77,6 +80,8 @@ class Site:
     skipped: list[dict] = field(default_factory=list)
     #: Downloads the site was built from (see sources.cache.Download.record).
     sources: list[dict] = field(default_factory=list)
+    #: The ground model used (site/terrain.py), described; its grid is in terrain.npz.
+    terrain: dict | None = None
     created: str = field(
         default_factory=lambda: dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     )
@@ -99,6 +104,7 @@ class Site:
             "frame": self.frame.to_dict(),
             "created": self.created,
             "sources": self.sources,
+            "terrain": self.terrain,
             "skipped": self.skipped,
             "buildings": [{**_plain(b), "footprint": mapping(b.footprint)} for b in self.buildings],
             "trees": [_plain(t) for t in self.trees],
@@ -122,6 +128,7 @@ class Site:
             footways=[Road(**{**r, "line": shape(r["line"])}) for r in d["footways"]],
             skipped=d["skipped"],
             sources=d["sources"],
+            terrain=d.get("terrain"),
             created=d["created"],
         )
 

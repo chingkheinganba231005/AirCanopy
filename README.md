@@ -12,7 +12,7 @@ The plan, the progress and a step-by-step explanation of how everything is built
 
 ## Try it
 
-Needs Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
+Needs Python 3.12 or newer and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
@@ -20,7 +20,9 @@ uv sync
 uv run aircanopy site build --around 114.1370,22.2840,500 --name hku
 ```
 
-This downloads OpenStreetMap data for the area and writes `sites/hku/` with the site model
+This downloads OpenStreetMap and Overture Maps buildings and the GEDTM30 terrain model for the
+area (`--no-overture` and `--terrain flat|copernicus` change that) and writes `sites/hku/` with
+the site model
 (`site.json`), a 3D scene for viewing (`scene.glb`, opens in any glTF viewer), the voxel grid for
 the physics (`voxels.npz`) and a summary that says how many building heights were mapped,
 estimated from storeys or estimated from neighbours (`summary.json`).

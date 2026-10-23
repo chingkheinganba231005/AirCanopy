@@ -52,6 +52,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use OpenStreetMap only, without Overture Maps buildings",
     )
+    build.add_argument(
+        "--terrain",
+        choices=["gedtm30", "copernicus", "flat"],
+        help="ground elevation model (default: gedtm30 when downloading, flat with --osm-file)",
+    )
+    build.add_argument(
+        "--terrain-file",
+        type=Path,
+        help="read the ground from this GeoTIFF (longitude, latitude; elevation in band 1)",
+    )
 
     view = sub.add_parser("view", help="open a site in the 3D viewer")
     view.add_argument("site_dir", type=Path, help="a site folder made by `aircanopy site build`")
@@ -117,6 +127,8 @@ def main(argv: list[str] | None = None) -> int:
             refresh=args.refresh,
             osm_file=args.osm_file,
             use_overture=not args.no_overture,
+            terrain_model=args.terrain,
+            terrain_file=args.terrain_file,
         )
         shown = {k: v for k, v in summary.items() if k not in ("sources", "credits")}
         print(json.dumps(shown, indent=2))

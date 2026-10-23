@@ -142,7 +142,7 @@ You asked for every limit of the simplified model to be addressed. This table is
 
 | Part | Choice | Why |
 | --- | --- | --- |
-| Language | Python 3.11+ | The scientific and AI ecosystem; you already know it |
+| Language | Python 3.12+ | The scientific and AI ecosystem; you already know it |
 | GPU physics | JAX | Compiles numerical code to fast GPU programs; batches many runs at once; gives gradients for free (useful for AI and optimisation) |
 | AI | PyTorch | The most common framework for neural operators and training |
 | Geometry and maps | shapely, pyproj, trimesh, rasterio, pyarrow | Standard, well-tested open-source libraries |
@@ -213,7 +213,7 @@ Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-mo
 - [x] Downloads cached with their source, time, licence and checksum (`sources/cache.py`)
 - [x] Buildings from OpenStreetMap, with heights and where each height came from (`sources/osm.py`, `site/`)
 - [x] Buildings from Overture Maps (worldwide footprints and heights), joined to OpenStreetMap (`sources/overture.py`, `site/from_overture.py`)
-- [ ] Terrain from Copernicus DEM
+- [x] Terrain from GEDTM30 (bare earth), with Copernicus GLO-30 as a labelled fallback; buildings, roads and trees stand on the ground; the view shows 1 km of real surroundings (`sources/terrain.py`, `site/terrain.py`)
 - [x] Trees from OpenStreetMap (position, height, crown, species when mapped)
 - [ ] Trees from the canopy height map (to fill heights and find unmapped trees)
 - [x] Roads and footways from OpenStreetMap (class, lanes, width when mapped)
@@ -541,6 +541,45 @@ While working on the viewer, `cd ui && npm run dev` serves it with instant reloa
 
 **Next.** Terrain from the Copernicus 30 m elevation model: HKU sits on a steep hillside, and the ground is not flat. Then trees from the satellite canopy height map.
 
+### 2026-10-23 · Step 7 · The ground is not flat: terrain
+
+**Goal.** Put every site on its real ground. HKU climbs a steep hillside: inside the 500 m square the ground rises from 24.5 m to 155.6 m above sea level (`results/site_hku.json`). Hills steer the wind and hold cold air, so flat ground would be wrong from the start.
+
+**What we did.**
+
+1. `sources/terrain.py` reads a window of a global elevation model around the site, plus 1 km of surroundings, and caches it as a small GeoTIFF.
+2. `site/terrain.py` resamples that window onto a 20 m grid in the site's metres. The ground between grid points is made of flat triangles (A-005).
+3. Every building stands on the lowest ground under its footprint (A-006), every tree on the ground at its trunk, and roads are laid on the slopes.
+4. The voxel grid has a third kind of cell, GROUND, and its heights are now metres above sea level. Around HKU it has 71 layers of 2 m and 1 409 863 ground cells.
+5. The 3D view shows the real hills around the site, with smooth shading, and an amber band marks the edge of the simulated area. Clicking a building shows the ground it stands on, and the panel says which elevation model was used, the range of heights and the model's uncertainty.
+6. `--terrain gedtm30|copernicus|flat` chooses the model, and `--terrain-file` reads a GeoTIFF from disk. The browser tests now run on a stored 23 kB sample of real terrain.
+7. The project moved to Python 3.12 (D-011), because the geospatial library rasterio needs it.
+8. 8 new tests (86 in total).
+
+**Why.**
+
+- *Which elevation model?* The best-known free one, Copernicus GLO-30, measures the top of whatever is there: roofs and treetops included. In a city that puts the "ground" on the buildings. GEDTM30 is a bare-earth model: it was made by machine learning from about 30 billion lidar points from two satellites (ICESat-2 and GEDI), to estimate the ground under buildings and forest. So GEDTM30 is the default, and Copernicus is a fallback that always says it is a surface model (D-012). Over the HKU square, Copernicus lies 3.45 m above GEDTM30 on average and up to 22.76 m above it (`results/terrain_probe.json`).
+- *Uncertainty kept.* GEDTM30 gives every pixel a standard deviation. Around HKU it averages 3.1 m. The site keeps it, so later results can say how much the ground itself is in doubt.
+- *One ground for everything.* The physics grid, the buildings, roads, trees and the drawn ground all use the same triangles, so nothing floats above or sinks below the ground you see. A test checks this: at the centre of every drawn triangle, the ground height equals the average of the triangle's corners.
+- *Surroundings.* The hills outside the square are drawn (1 km all round) but not simulated, so the picture shows the place as a person knows it.
+
+**What to understand.**
+
+- *DTM and DSM.* A digital terrain model (DTM) is the bare ground. A digital surface model (DSM) is the top of everything, including buildings and trees. Satellites see the surface, so making a DTM means estimating what is under the buildings and trees.
+- *Heights above what?* The Earth is not a perfect ball. Elevation models measure height above the *geoid*, the shape the sea would take if it extended under the land, which is close to mean sea level. Both our models use the same geoid model, EGM2008 (`docs/sources.md`).
+- *Cloud-optimised GeoTIFF (COG).* A GeoTIFF is an image whose pixels are values on a map. A COG stores it in tiles with an index, so a program can fetch one window over HTTP, as with Overture's Parquet files. GEDTM30 is one 432 GB file for the whole world. The HKU site with its surroundings needed 2.5 MB of it in 10 requests, for both the heights and their uncertainty (`results/terrain_probe.json`).
+- *Resampling* means reading a grid at points other than its own: here, from a grid in degrees to a grid in metres, by blending the four nearest pixel values (bilinear interpolation).
+
+**Problems and fixes.**
+
+1. *"The elevation file does not cover the site."* The 20 m grid's last points can overshoot the requested area by up to one step, and rounding the download window could also cut its edge. The window is now rounded outward and reaches one grid step and one pixel further.
+2. *rasterio 1.5 needs Python 3.12*, and the project used 3.11. Python 3.12 was already installed, so the project moved to it, in the project files, `.python-version` and CI. New releases of scientific libraries are dropping 3.11, so the move had to come anyway.
+3. *A deprecation warning*: the `affine` library now wants `inverse @ (x, y)` instead of `inverse * (x, y)`. Changed. The tests now run with such warnings treated as errors, to catch the next one early.
+4. *Unverified claims.* A first draft of this entry said GEDTM30 is a 328 GB file of which a site reads a few hundred kilobytes; measuring (`benchmarks/terrain_probe.py`) gave 432 GB and 2.5 MB. The code also said both models use the EGM2008 geoid. For GEDTM30 the file says so itself. For Copernicus neither the file nor the readme did, so we found it in the Copernicus DEM Product Handbook before keeping the sentence.
+5. *The credits line ran under the panel*, and a local copy of a GEDTM30 window was credited as "an elevation file supplied by the user". The footer now stays beside the panel, and a file carrying our own model tag gets that model's real credit and licence.
+
+**Next.** Trees from the satellite canopy height map: OpenStreetMap has only 6 trees in the HKU square, none with a height.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -602,6 +641,10 @@ Computer graphics describe surfaces with *triangles*. A *mesh* is a list of corn
 
 A screen pixel's number is not proportional to the light it gives. In *sRGB*, the standard for screens, the numbers are spaced so that equal steps look like equal changes in brightness to our eyes. Mid-grey, 128 out of 255, sends out only about 21 % of the light of white. Physics, including the lighting in a 3D renderer, needs numbers proportional to light (*linear* values), because light from two lamps adds up. So a renderer converts colours to linear values, does its lighting, and converts back to sRGB for the screen. The formula is a short curve published by the International Color Consortium; `srgb_to_linear` in `site/mesh.py` uses it.
 
+### 6.10 The shape of the ground
+
+A *digital elevation model* is a grid of ground heights. A *terrain model* (DTM) gives the bare ground; a *surface model* (DSM) gives the top of whatever is there, roofs and treetops included. Heights are measured above the *geoid*: the shape the sea's surface would have if it ran under the continents, shaped by gravity, which is close to mean sea level. Between the grid's points the ground has to be filled in; we use flat triangles, which the graphics card can draw directly and which make the ground exactly the same for the physics and for the picture.
+
 (More lessons follow as the project reaches them: wall models, trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---
@@ -619,6 +662,8 @@ A screen pixel's number is not proportional to the light it gives. In *sRGB*, th
 | D-007 | The scene for drawing (meshes) and the grid for the physics (voxels) are both made from the same site model | They can never disagree about where a building is |
 | D-008 | The viewer is plain TypeScript with three.js, built with Vite; no interface framework for now | Small and easy to learn from; three.js is the most used WebGL library; a framework can come later if the panels grow |
 | D-010 | Read Overture Maps directly from its public files (STAC index, Parquet footers, HTTP range requests) with pyarrow, rather than through a database engine or Overture's own download tool | One well-known dependency (pyarrow); every step can be tested offline; it works through the proxy of the cloud container |
+| D-011 | Python 3.12 or newer | rasterio 1.5 needs it, other scientific libraries are dropping 3.11, and the change is cheapest early |
+| D-012 | Ground from GEDTM30 (bare earth) by default; Copernicus GLO-30 only as a fallback that is labelled a surface model; level ground only when asked or when no model can be read, and then said | A surface model puts the ground on roofs and treetops in cities; the label keeps that from passing unnoticed |
 | D-009 | Every package version is pinned exactly, and new versions are taken only after they have been out for about two weeks, unless a fix is needed | A build that worked keeps working; very new releases are where most broken or malicious packages are caught |
 
 ---

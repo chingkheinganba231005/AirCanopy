@@ -21,6 +21,8 @@ test("opens the site and shows what it contains", async ({ page, request }) => {
   await expect(panel.locator("h1")).toHaveText(summary.name);
   await expect(panel).toContainText(`${summary.buildings} buildings`);
   await expect(page.locator("#attribution")).toContainText("OpenStreetMap contributors");
+  await expect(page.locator("#attribution")).toContainText("GEDTM30 v1.2");
+  await expect(panel).toContainText("From the GEDTM30 terrain model");
   // Each layer's count is the number of features drawn in that group.
   const levels = summary.building_heights["osm:levels"] ?? 0;
   await expect(panel.locator('[data-layer="buildings_levels"] .num')).toHaveText(String(levels));

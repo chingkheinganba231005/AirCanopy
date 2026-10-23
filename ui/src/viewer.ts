@@ -171,6 +171,18 @@ export class Viewer {
       material.polygonOffsetFactor = name === "roads" ? -1 : -2;
       material.polygonOffsetUnits = name === "roads" ? -1 : -2;
     }
+    if (name === "ground") {
+      // The ground is smooth hills, not facets: average the normals at shared corners.
+      mesh.geometry.computeVertexNormals();
+      material.flatShading = false;
+      material.needsUpdate = true;
+    }
+    if (name === "site_outline") {
+      material.polygonOffset = true;
+      material.polygonOffsetFactor = -3;
+      material.polygonOffsetUnits = -3;
+      mesh.castShadow = false;
+    }
     if (name.startsWith("buildings")) {
       const edges = new LineSegments(
         new EdgesGeometry(mesh.geometry, 30),
@@ -181,28 +193,41 @@ export class Viewer {
     }
   }
 
-  /** The site's own square (the ground mesh) up to its tallest feature. */
+  /** The simulated square (marked by the site outline), from its lowest ground up to its
+   *  highest feature. The ground mesh reaches further: it shows the surroundings. */
   private siteBox(): Box3 {
     const box = new Box3();
+    const outline = this.groups.get("site_outline")?.mesh;
     const ground = this.groups.get("ground")?.mesh;
-    if (ground) box.expandByObject(ground);
+    if (outline) box.expandByObject(outline);
+    else if (ground) box.expandByObject(ground);
     else for (const g of this.groups.values()) box.expandByObject(g.mesh);
     if (box.isEmpty()) box.set(new Vector3(-100, 0, -100), new Vector3(100, 50, 100));
-    let top = 0;
-    for (const g of this.groups.values())
-      top = Math.max(top, new Box3().setFromObject(g.mesh).max.y);
-    box.min.y = 0;
-    box.max.y = Math.max(top, 1);
+    const inSquare = (b: Box3) =>
+      b.max.x >= box.min.x && b.min.x <= box.max.x && b.max.z >= box.min.z && b.min.z <= box.max.z;
+    let top = box.max.y;
+    for (const [name, g] of this.groups) {
+      if (name === "ground") continue;
+      const b = new Box3().setFromObject(g.mesh);
+      if (inSquare(b)) top = Math.max(top, b.max.y);
+    }
+    box.max.y = Math.max(top, box.min.y + 1);
     return box;
+  }
+
+  /** The lowest point of the drawn ground (site and surroundings). */
+  private groundFloor(): number {
+    const ground = this.groups.get("ground")?.mesh;
+    return ground ? new Box3().setFromObject(ground).min.y : 0;
   }
 
   /** Shadows, the ground around the site and the haze, sized to the site. Once, after loading. */
   private setUpSurroundings(): void {
     const box = this.siteBox();
-    const centre = box.getCenter(new Vector3()).setY(0);
+    const centre = box.getCenter(new Vector3());
     const radius = Math.max(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
 
-    const reach = radius * 1.5 + box.max.y;
+    const reach = radius * 1.5 + (box.max.y - box.min.y);
     this.sun.position.copy(centre).addScaledVector(this.sunDir, reach * 2);
     this.sun.target.position.copy(centre);
     const cam = this.sun.shadow.camera;
@@ -218,7 +243,8 @@ export class Viewer {
       new CircleGeometry(radius * 60, 96).rotateX(-Math.PI / 2),
       new MeshStandardMaterial({ color: "#7d8a77", roughness: 1 }),
     );
-    outside.position.set(centre.x, -0.05, centre.z);
+    // Just below the lowest drawn ground, so it never cuts through the hills.
+    outside.position.set(centre.x, this.groundFloor() - 1, centre.z);
     outside.receiveShadow = true;
     outside.raycast = () => {};
     this.scene.add(outside);
@@ -235,7 +261,7 @@ export class Viewer {
   frame(): void {
     const box = this.siteBox();
     const target = box.getCenter(new Vector3());
-    target.y = box.max.y * 0.2;
+    target.y = box.min.y + (box.max.y - box.min.y) * 0.2;
     const direction = new Vector3(-1.45, 1.05, 1.75).normalize();
     const corners = [0, 1, 2, 3, 4, 5, 6, 7].map(
       (k) =>

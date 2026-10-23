@@ -28,7 +28,7 @@ These rules apply to every working session, human or AI-assisted. The plan, the 
 
 ## Code
 
-10. Python 3.11+, package in `src/aircanopy/`, dependencies managed with uv (`uv.lock` is committed). JavaScript for the viewer lives in `ui/`.
+10. Python 3.12+, package in `src/aircanopy/`, dependencies managed with uv (`uv.lock` is committed). JavaScript for the viewer lives in `ui/`.
 11. Plain, direct English in code, docs and messages. No filler, no marketing tone, no emoji. Comments explain why, not what.
 12. Every module has tests. Physics code is checked against analytic solutions or published references before it is used for anything else.
 13. Verify by running things, not by assuming: tests, benchmarks, and screenshots of the viewer that you look at.

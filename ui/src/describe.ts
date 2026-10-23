@@ -1,7 +1,7 @@
 // Plain-words descriptions of site data, for the panel and the info card. No three.js here, so
 // these are easy to unit-test.
 
-import type { Assumptions, FeatureRecord, GeoJsonPolygon, SiteJson } from "./types";
+import type { Assumptions, FeatureRecord, GeoJsonPolygon, SiteJson, SummaryJson } from "./types";
 
 const NUMBER = new Intl.NumberFormat("en", { maximumFractionDigits: 0 });
 
@@ -116,4 +116,16 @@ export function skippedByReason(site: SiteJson): [string, number][] {
 export function footprintSourceText(source: string | undefined): string {
   if (!source || source === "osm") return "OpenStreetMap";
   return source.startsWith("overture:") ? `Overture Maps: ${source.slice(9)}` : source;
+}
+
+/** One sentence about the ground: which model, the range of heights, its uncertainty. */
+export function groundText(t: SummaryJson["terrain"]): string {
+  if (!t || t.model === "flat") return "Level ground: no elevation model was used.";
+  const name = t.model === "gedtm30" ? "the GEDTM30 terrain model" : `the ${t.model} model`;
+  const range =
+    t.ground_min_m !== null && t.ground_max_m !== null
+      ? `${t.ground_min_m.toFixed(0)} to ${t.ground_max_m.toFixed(0)} m above sea level`
+      : "heights unknown";
+  const std = t.std_mean_m !== null ? `, typically within ±${t.std_mean_m.toFixed(1)} m` : "";
+  return `From ${name}: ${range}${std}.`;
 }

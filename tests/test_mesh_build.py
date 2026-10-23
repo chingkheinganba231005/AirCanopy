@@ -65,6 +65,7 @@ def test_scene_groups_and_y_up_axes():
     sc = scene(small_site())
     assert set(sc.geometry) == {
         "ground",
+        "site_outline",
         "buildings_mapped",
         "buildings_levels",
         "buildings_estimated",
@@ -150,7 +151,7 @@ def test_cli_parses_both_ways_of_giving_an_area():
 
 
 def test_cli_site_build_writes_the_folder(tmp_path, monkeypatch, capsys):
-    def fake_build_site(name, bbox, out, dx=2.0, refresh=False, osm_file=None, use_overture=True):
+    def fake_build_site(name, bbox, out, dx=2.0, refresh=False, osm_file=None, **kwargs):
         return build.build_from_osm_data(name, bbox, osm.parse(FIXTURE), out, dx, [])
 
     monkeypatch.setattr(build, "build_site", fake_build_site)

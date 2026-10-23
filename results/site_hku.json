@@ -1,7 +1,7 @@
 {
-  "what": "site built from OpenStreetMap joined with Overture Maps: a 500 m square around HKU",
+  "what": "site built from OpenStreetMap, Overture Maps and the GEDTM30 terrain model: a 500 m square around HKU",
   "command": "aircanopy site build --around 114.1370,22.2840,500 --name hku",
-  "run_at": "2026-10-23T09:44:45Z",
+  "run_at": "2026-10-23T10:01:21Z",
   "name": "hku",
   "bbox": [
     114.13457411746967,
@@ -42,11 +42,22 @@
   "voxels": {
     "dx_m": 2.0,
     "shape_zyx": [
-      57,
+      71,
       251,
       251
     ],
-    "building_cells": 267527
+    "building_cells": 272117,
+    "ground_cells": 1409863
+  },
+  "terrain": {
+    "file": "terrain.npz",
+    "model": "gedtm30",
+    "kind": "terrain",
+    "vertical_datum": "EGM2008 geoid (about mean sea level)",
+    "grid_m": 20.0,
+    "ground_min_m": 24.5,
+    "ground_max_m": 155.6,
+    "std_mean_m": 3.1
   },
   "assumptions": {
     "A-001": {
@@ -102,6 +113,15 @@
       "licence": "ODbL-1.0",
       "attribution": "© OpenStreetMap contributors, Overture Maps Foundation",
       "release": "2026-10-21.0"
+    },
+    {
+      "path": "gedtm30_114.124384_22.272260_114.149616_22.295739.tif",
+      "url": "https://s3.opengeohub.org/global/dtm/v1.2/gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif",
+      "accessed": "2026-10-23T10:01:21Z",
+      "bytes": 28306,
+      "sha256": "7de3a33c1e64a50a10e39f4b176ed1949e9143aa3f03d904a0b76a606e0c2b5c",
+      "licence": "CC-BY-4.0",
+      "attribution": "GEDTM30 v1.2, Yufeng Ho and Tom Hengl, OpenGeoHub, doi:10.5281/zenodo.18887460"
     }
   ]
 }

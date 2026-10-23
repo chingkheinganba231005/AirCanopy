@@ -1,0 +1,48 @@
+{
+  "what": "Copernicus GLO-30 (surface) minus GEDTM30 (terrain) over the HKU square, GEDTM30 uncertainty, and the cost of reading each model",
+  "run_at": "2026-10-23T10:09:27Z",
+  "aircanopy": "0.1.0",
+  "site_bbox": [
+    114.13457411746967,
+    22.281742339726087,
+    114.13942588253033,
+    22.28625765964643
+  ],
+  "read_bbox": [
+    114.12438431850806,
+    22.27225966994817,
+    114.14961568149194,
+    22.295739351086105
+  ],
+  "grid_m": 20.0,
+  "surface_minus_terrain_m": {
+    "mean": 3.45,
+    "min": -9.32,
+    "max": 22.76,
+    "grid_points": 625
+  },
+  "gedtm30_std_m": {
+    "mean": 3.12,
+    "max": 7.61
+  },
+  "cost": {
+    "gedtm30": {
+      "file_bytes": 432407644715,
+      "downloaded_bytes": 2470000,
+      "range_requests": 10,
+      "window_pixels": [
+        92,
+        86
+      ]
+    },
+    "copernicus": {
+      "file_bytes": 25030462,
+      "downloaded_bytes": 1720320,
+      "range_requests": 2,
+      "window_pixels": [
+        91,
+        85
+      ]
+    }
+  }
+}

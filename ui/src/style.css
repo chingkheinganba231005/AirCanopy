@@ -159,7 +159,7 @@ a {
 
 #info {
   right: 12px;
-  bottom: 40px;
+  bottom: 64px;
   width: 340px;
   padding: 14px 16px 10px;
 }
@@ -233,6 +233,9 @@ dd {
   position: fixed;
   right: 12px;
   bottom: 10px;
+  /* Never under the panel: the panel is 330 px wide, 12 px from the edge. */
+  max-width: calc(100% - 370px);
+  text-align: right;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 11px;
@@ -264,6 +267,12 @@ dd {
 }
 
 @media (max-width: 760px) {
+  #attribution {
+    max-width: none;
+    left: 12px;
+    bottom: calc(42vh + 18px);
+  }
+
   #panel {
     top: auto;
     right: 12px;

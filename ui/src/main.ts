@@ -54,6 +54,7 @@ function layersOf(viewer: Viewer, summary: SummaryJson): Layer[] {
     { key: "roads", label: "Roads", groups: ["roads"] },
     { key: "footways", label: "Footways and paths", groups: ["footways"] },
     { key: "trees", label: "Trees", groups: ["tree_crowns", "tree_trunks"] },
+    { key: "site_outline", label: "Edge of the simulated area", groups: ["site_outline"] },
   ];
   return defs.map((d) => {
     const g = viewer.groups.get(d.groups[0] ?? "");
