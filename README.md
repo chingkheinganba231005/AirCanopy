@@ -4,6 +4,15 @@ Plant trees virtually anywhere in the world and see, in 3D, how they change stre
 
 AirCanopy builds a 3D model of a real place from open data (buildings, terrain, trees, roads), then simulates the wind, the sun, the heat and the chemistry of the air on a graphics card. A fast AI model trained on those simulations lets you try many tree layouts in seconds and find the best trade-off between cooler streets and cleaner air, with the physics available to check any answer.
 
+![The 500 m square around the University of Hong Kong in the AirCanopy viewer](docs/images/hku_view.jpg)
+
+*A 500 m square around the University of Hong Kong, built from open data: buildings from
+OpenStreetMap and Overture Maps, coloured by where their heights come from; the ground from the
+GEDTM30 terrain model, with 1 km of real hills around it; trees found in the Meta/WRI canopy
+height map. Click anything to see its data and its sources:*
+
+![A building selected in the viewer, with a card giving its height and where it came from](docs/images/hku_view_building.jpg)
+
 ## Status
 
 Early development. AirCanopy is a rebuild of [Trees vs Breath](https://github.com/chingkheinganba231005/Trees-vs-breathe), a 2D prototype that reached the top 8 of HacKU 2026, into a 3D tool meant for real use.

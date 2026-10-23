@@ -27,6 +27,8 @@ Each log entry in Part 5 has the same shape:
 - **Problems and fixes**: what went wrong and how we solved it.
 - **Next**: what comes after.
 
+Pictures are in `docs/images/`. The ones of the current state are made by scripts, so they can be made again after any change: `uv run python scripts/figures.py sites/hku docs/images/hku` draws the site from above, and `node ui/scripts/screenshot.mjs http://127.0.0.1:4180/ docs/images/hku` photographs the 3D viewer (start it first with `uv run aircanopy view sites/hku --port 4180 --no-browser`). Pictures in `docs/images/history/` were taken at the time of the step that shows them, as in a lab notebook.
+
 ---
 
 ## Part 1 — What AirCanopy is
@@ -439,6 +441,14 @@ Open `sites/hku/scene.glb` in any program that reads glTF, for example Blender (
 
 1. *An underground station drawn on the street.* The network of thin shapes was HKU MTR station: tagged `location=underground`, `layer=-2`, it had been drawn as an 8 159 m² block 3 m tall at street level. In the wind simulation it would have been a wall where there is none. Buildings tagged `location=underground` are now left out, with the reason recorded. The meaning of the tag is from the OpenStreetMap wiki (`docs/sources.md`).
 2. *Roof-only parts drawn as solid columns.* Five `building:part=roof` pieces (roofs without walls) were drawn as solid blocks from the ground. They are now left out like `building=roof` until roofs are modelled as thin raised slabs.
+
+<p>
+  <img src="docs/images/history/step4_voxels_station_on_surface.png" alt="Voxel grid seen from above, with a network of thin low shapes on the left" width="49%">
+  <img src="docs/images/history/step4_voxels_station_removed.png" alt="The same grid after the fix: the network is gone" width="49%">
+</p>
+
+*The first voxel grid of the HKU square seen from above (north up; brighter is taller). Left: the thin dark network on the left is HKU MTR station, which is underground, drawn at street level. Right: after the fix. Pictures from Step 4.*
+
 3. *Colours in glTF.* Saving one colour per triangle made the export library convert them to colours per corner, which needs an extra package. One named *material* per group (buildings, roads, trees) is the normal glTF way, keeps the file smaller and lets the viewer restyle a whole group, so we switched to that.
 4. *A repeat mistake.* `shapely.points` does not accept a list of point objects; the same mistake was fixed in step 3. `shapely.centroid` applied to the whole list of footprints gives the centres directly.
 5. *A test with walls exactly through cell centres.* A point on the edge of a polygon does not count as inside, so a wall exactly through a row of cell centres leaves that row out. Real map data never line up exactly with the grid, so this only matters in tests; the test now puts its walls on cell faces.
@@ -497,6 +507,14 @@ While working on the viewer, `cd ui && npm run dev` serves it with instant reloa
 2. *three.js r186 removed the soft shadow mode* we asked for (`PCFSoftShadowMap`); it said so in the console, and we switched to `PCFShadowMap`.
 3. *Pale colours*: glTF expects linear colours (above). `srgb_to_linear` in `site/mesh.py` now converts them, using the sRGB formula from the International Color Consortium.
 4. *No shadows to see*: the display sun stood behind the camera, so every shadow fell behind a building. The display sun now comes from the south-east while the camera starts in the south-west. It is not the real sun, and the viewer says so.
+
+<p>
+  <img src="docs/images/history/step5_first_view.jpg" alt="First screenshot of the viewer: pale buildings, off-centre" width="49%">
+  <img src="docs/images/history/step5_view_fixed.jpg" alt="Viewer after the fixes, with the tallest building selected" width="49%">
+</p>
+
+*Left: the viewer's first picture, with pale colours, no visible shadows and the site half under the panel. Right: after the fixes, with the 114 m tower selected; the card says its height comes from its storey count. Pictures from Step 5.*
+
 5. *The first click test failed.* On the small sample site, 99 m towers stand on a 200 m square. The camera, placed for the square alone, cut off the tallest roof, so the click went past it. Now the camera moves back step by step (a *binary search*) until every corner of the site's box, tallest building included, is on screen and clear of the panel.
 6. *Roads stretched the picture.* Roads are kept whole in the site model, and some run far outside the site. For drawing they are now cut to the site's square.
 7. *A wording mistake.* We had called OpenStreetMap `height` tags "measured". Volunteers enter them, sometimes from surveys and sometimes as estimates, so the viewer now says "mapped".
@@ -518,6 +536,11 @@ While working on the viewer, `cd ui && npm run dev` serves it with instant reloa
 6. 8 new tests, using a real 20 kB Overture sample of the HKU test box (`tests/data/overture/`) and a small web server inside the tests that answers range requests like S3 does.
 
 **What Overture added around HKU** (`results/site_hku.json`). 14 building outlines that OpenStreetMap does not have, traced from satellite images by Shi et al. (2023) for East Asia; 213 buildings in all. Overture had no new heights here, only the same storey counts as OpenStreetMap. Elsewhere it does. In a sample of 15 926 buildings in the central United States, 14 523 had a height, 804 of them measured by USGS lidar. In a sample of 17 804 from central France, 5 943 had one, 5 563 of those estimated by Microsoft's machine learning (`results/overture_probe.json`).
+
+![Viewer legend with five kinds of building height](docs/images/history/step6_five_kinds.jpg)
+
+*The legend now has five kinds of height. Around HKU only two occur: from storeys (blue-grey) and estimated from neighbours (sand). Picture from Step 6.*
+
 
 **Why.**
 
@@ -544,6 +567,16 @@ While working on the viewer, `cd ui && npm run dev` serves it with instant reloa
 ### 2026-10-23 · Step 7 · The ground is not flat: terrain
 
 **Goal.** Put every site on its real ground. HKU climbs a steep hillside: inside the 500 m square the ground rises from 24.5 m to 155.6 m above sea level (`results/site_hku.json`). Hills steer the wind and hold cold air, so flat ground would be wrong from the start.
+
+![Shaded relief of the ground around HKU with the site square in amber](docs/images/hku_terrain.png)
+
+*The ground from GEDTM30 over the site and 1 km around it (north up; contours every 20 m; the sea in blue; the simulated square in amber; the white bar is 500 m).*
+
+
+![Voxel grid from above: buildings by height on terraced ground](docs/images/hku_voxels.png)
+
+*The voxel grid from above. Buildings are coloured by their height above the ground (dark blue: about 100 m); the ground shows as terraces, because in the grid it is made of 2 m steps. The white bar is 100 m.*
+
 
 **What we did.**
 
@@ -578,6 +611,11 @@ While working on the viewer, `cd ui && npm run dev` serves it with instant reloa
 4. *Unverified claims.* A first draft of this entry said GEDTM30 is a 328 GB file of which a site reads a few hundred kilobytes; measuring (`benchmarks/terrain_probe.py`) gave 432 GB and 2.5 MB. The code also said both models use the EGM2008 geoid. For GEDTM30 the file says so itself. For Copernicus neither the file nor the readme did, so we found it in the Copernicus DEM Product Handbook before keeping the sentence.
 5. *The credits line ran under the panel*, and a local copy of a GEDTM30 window was credited as "an elevation file supplied by the user". The footer now stays beside the panel, and a file carrying our own model tag gets that model's real credit and licence.
 
+![Viewer with the credits line covering the bottom of the panel](docs/images/history/step7_footer_under_panel.jpg)
+
+*The credits line (bottom) running under the panel before the fix. Picture from Step 7.*
+
+
 **Next.** Trees from the satellite canopy height map: OpenStreetMap has only 6 trees in the HKU square, none with a height.
 
 ### 2026-10-23 · Step 8 · Every tree, from space: the canopy height map
@@ -594,6 +632,16 @@ While working on the viewer, `cd ui && npm run dev` serves it with instant reloa
 6. 8 new tests (94 in total), and one more browser test.
 
 **What it found around HKU** (`results/site_hku.json`). 174 tree crowns, from 5 to 22 m tall (median 12 m), and from 3.6 to 42.6 m across (median 15.6 m). Canopy at least 5 m tall covers 20% of the square. One of the 6 mapped trees stands inside a found crown; the other 5 are in none. The satellite images are from 3 April 2018.
+
+![Canopy heights in green with crown outlines in yellow and treetops in red](docs/images/hku_canopy.png)
+
+*The canopy height map over the HKU square (north up; brighter green is taller; buildings in grey). Yellow lines are the edges between the crowns found by the watershed, red dots the treetops. The woodland on the hill to the south splits into many crowns. The white bar is 100 m.*
+
+
+![3D view of the site with buildings hidden, showing trees and the tallest one selected](docs/images/hku_view_tree.jpg)
+
+*The trees in the 3D view, with buildings switched off: the tallest crown (22 m) is selected. Its card says the height is estimated from the canopy height map, from satellite images of 3 April 2018.*
+
 
 **Why.**
 
