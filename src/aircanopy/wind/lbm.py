@@ -168,14 +168,23 @@ def _roll(xp, a, shift):
     return xp.roll(a, [shift[k] for k in axes], axis=axes)
 
 
-def stream(xp, lat: VelocitySet, f_post, solid, free_slip_top: bool = False):
+def stream(
+    xp, lat: VelocitySet, f_post, solid, free_slip_top: bool = False, slip_floors: bool = False
+):
     """Pull streaming with halfway bounce-back on solid cells; periodic elsewhere.
 
     With `free_slip_top`, a packet arriving at the top layer from above is the mirror image
     (cz -> -cz) of the one that left the top layer upwards from the cell it passed over. The top
     layer must then be fluid everywhere (the solver checks).
+
+    With `slip_floors`, floors are free-slip: a packet arriving from below at an air cell that
+    stands on a solid cell is the mirror image of the one that left the air cell beside it
+    downwards, as if reflected off the floor halfway down. Only on a flat stretch of floor: where
+    that neighbour is solid too (a wall, an edge), the packet bounces back as before. The
+    friction of a rough floor is then added as a drag in the air just above it (walls.py).
     """
     out = []
+    below = _roll(xp, solid, (1, 0, 0)) if slip_floors else None
     for i in range(lat.q):
         cx, cy, cz = (int(v) for v in lat.c[i])
         g = _roll(xp, f_post[i], (cz, cy, cx))
@@ -185,16 +194,54 @@ def stream(xp, lat: VelocitySet, f_post, solid, free_slip_top: bool = False):
         wall = _roll(xp, solid, (cz, cy, cx))
         if free_slip_top and cz < 0:
             wall = xp.concatenate([wall[:-1], xp.zeros_like(wall[-1:])], axis=0)
-        out.append(xp.where(wall, f_post[lat.opp[i]], g))
+        bounced = f_post[lat.opp[i]]
+        if slip_floors and cz > 0:
+            beside = _roll(xp, solid, (0, cy, cx))
+            mirrored = _roll(xp, f_post[lat.mirror_z[i]], (0, cy, cx))
+            bounced = xp.where(below & ~beside, mirrored, bounced)
+        out.append(xp.where(wall, bounced, g))
     return xp.stack(out)
 
 
-def collide(xp, lat: VelocitySet, f, cfg, regularised: bool = True, forced: bool = False):
+def velocity_and_force(xp, rho, momentum, cfg, forced: bool, dragged: bool):
+    """The velocity u = (momentum + F / 2) / rho and the force F on each cell (None if none).
+
+    F is rho g for a body acceleration g (`forced`), plus a drag -(lambda / 2) rho |u| u
+    (`dragged`): the friction of a rough floor (walls.py) or, later, of leaves. The drag depends
+    on the velocity it changes. Writing u0 = momentum / rho + g / 2, the velocity is u = k u0
+    with k = 2 / (1 + sqrt(1 + lambda |u0|)), the exact solution of u = u0 - (lambda / 4) |u| u,
+    which stays bounded however large lambda is (as in the 2D solver; Guo and Zhao 2002).
+    """
+    g = cfg["g"]
+    u = [momentum[a] / rho + (0.5 * g[a] if forced else 0.0) for a in range(3)]
+    if not (forced or dragged):
+        return u, None
+    force = [rho * g[a] if forced else 0.0 * rho for a in range(3)]
+    if dragged:
+        lam = cfg["drag"]
+        speed0 = xp.sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2])
+        k = 2.0 / (1.0 + xp.sqrt(1.0 + lam * speed0))
+        u = [k * c for c in u]
+        pull = 0.5 * lam * rho * k * speed0
+        force = [force[a] - pull * u[a] for a in range(3)]
+    return u, force
+
+
+def collide(
+    xp,
+    lat: VelocitySet,
+    f,
+    cfg,
+    regularised: bool = True,
+    forced: bool = False,
+    dragged: bool = False,
+):
     """The collision of step 3 and 4 above, at every cell; solid cells keep f."""
-    g = cfg["g"] if forced else None
-    rho, u = density_velocity(xp, lat, f, g)
+    rho = moment(f, [1] * lat.q)
+    momentum = [moment(f, lat.c[:, a]) for a in range(3)]
+    u, force = velocity_and_force(xp, rho, momentum, cfg, forced, dragged)
+    forced = force is not None
     feq = equilibrium(xp, lat, rho, u)
-    force = tuple(rho * g[a] for a in range(3)) if forced else None
     p = flux(xp, lat, f, feq, u, force)
     tau = smagorinsky_tau(xp, p, rho, cfg["tau0"], cfg["cs"])
     if regularised:
@@ -230,7 +277,15 @@ def moment_matrices(lat: VelocitySet) -> tuple[np.ndarray, np.ndarray]:
     return m, h
 
 
-def collide_moments(xp, lat: VelocitySet, f, cfg, regularised: bool = True, forced: bool = False):
+def collide_moments(
+    xp,
+    lat: VelocitySet,
+    f,
+    cfg,
+    regularised: bool = True,
+    forced: bool = False,
+    dragged: bool = False,
+):
     """The same collision as `collide`, through the 10 moments: f -> M f -> H A.
 
     Two small matrix products per cell replace the sums over directions, which processors and
@@ -241,9 +296,8 @@ def collide_moments(xp, lat: VelocitySet, f, cfg, regularised: bool = True, forc
     # One flat matrix product over all cells: twice as fast as einsum on a processor.
     m = (xp.asarray(m_mat, dtype=f.dtype) @ f.reshape(lat.q, -1)).reshape(10, *cells)
     rho = m[0]
-    g = cfg["g"]
-    u = [m[1 + a] / rho + (0.5 * g[a] if forced else 0.0) for a in range(3)]
-    force = [rho * g[a] for a in range(3)] if forced else None
+    u, force = velocity_and_force(xp, rho, [m[1], m[2], m[3]], cfg, forced, dragged)
+    forced = force is not None
     p, uu, uf = [], [], []
     for k, (a, b) in enumerate(PAIRS):
         uu.append(rho * u[a] * u[b])
@@ -275,7 +329,17 @@ def collide_moments(xp, lat: VelocitySet, f, cfg, regularised: bool = True, forc
     return xp.where(cfg["fluid"], post, f)
 
 
-def step(xp, lat: VelocitySet, f_post, cfg, regularised=True, free_slip_top=False, forced=False):
+def step(
+    xp,
+    lat: VelocitySet,
+    f_post,
+    cfg,
+    regularised=True,
+    free_slip_top=False,
+    forced=False,
+    dragged=False,
+    slip_floors=False,
+):
     """One time step: stream, then collide. Takes and returns post-collision populations."""
-    f = stream(xp, lat, f_post, cfg["solid"], free_slip_top)
-    return collide_moments(xp, lat, f, cfg, regularised, forced)
+    f = stream(xp, lat, f_post, cfg["solid"], free_slip_top, slip_floors)
+    return collide_moments(xp, lat, f, cfg, regularised, forced, dragged)
