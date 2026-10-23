@@ -102,6 +102,7 @@ def main(site_dir: Path) -> None:
 
     tunnels = [r for r in ways if r.tunnel]
     bridges = [r for r in ways if r.bridge]
+    path_bridges = [r for r in site.footways if r.bridge]
     result = {
         "what": "share of buildings, footprint area and volume by kind of height; the largest "
         "buildings with estimated heights; towers tagged location=podium",
@@ -133,6 +134,8 @@ def main(site_dir: Path) -> None:
             "in_tunnels_m": inside_m(tunnels),
             "on_bridges": len(bridges),
             "on_bridges_m": inside_m(bridges),
+            "paths_on_bridges": len(path_bridges),
+            "paths_on_bridges_m": inside_m(path_bridges),
         },
         "skipped_in_the_download_by_reason": dict(Counter(s["reason"] for s in site.skipped)),
     }

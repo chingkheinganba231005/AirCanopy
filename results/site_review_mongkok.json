@@ -1,6 +1,6 @@
 {
   "what": "share of buildings, footprint area and volume by kind of height; the largest buildings with estimated heights; towers tagged location=podium",
-  "run_at": "2026-10-23T12:39:29Z",
+  "run_at": "2026-10-23T12:41:32Z",
   "aircanopy": "0.1.0",
   "site": "mongkok",
   "site_built": "2026-10-23T12:35:40Z",
@@ -99,7 +99,9 @@
     "in_tunnels": 10,
     "in_tunnels_m": 128,
     "on_bridges": 157,
-    "on_bridges_m": 5348
+    "on_bridges_m": 5348,
+    "paths_on_bridges": 97,
+    "paths_on_bridges_m": 2548
   },
   "skipped_in_the_download_by_reason": {
     "underground (the model is above the ground)": 4,

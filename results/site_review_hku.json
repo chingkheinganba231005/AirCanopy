@@ -1,6 +1,6 @@
 {
   "what": "share of buildings, footprint area and volume by kind of height; the largest buildings with estimated heights; towers tagged location=podium",
-  "run_at": "2026-10-23T12:39:30Z",
+  "run_at": "2026-10-23T12:41:33Z",
   "aircanopy": "0.1.0",
   "site": "hku",
   "site_built": "2026-10-23T12:35:34Z",
@@ -99,7 +99,9 @@
     "in_tunnels": 25,
     "in_tunnels_m": 1159,
     "on_bridges": 58,
-    "on_bridges_m": 1662
+    "on_bridges_m": 1662,
+    "paths_on_bridges": 43,
+    "paths_on_bridges_m": 767
   },
   "skipped_in_the_download_by_reason": {
     "underground (the model is above the ground)": 1,

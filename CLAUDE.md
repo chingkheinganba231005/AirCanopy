@@ -36,7 +36,7 @@ These rules apply to every working session, human or AI-assisted. The plan, the 
 ## Environment notes
 
 14. The cloud container used for AI-assisted sessions has no GPU: tests run on CPU with small grids. Large runs go to a GPU (Google Colab or rented), through notebooks or scripts that record what they ran.
-15. In that container, the Overpass API and Open-Meteo are blocked; Amazon S3 open data, the OpenStreetMap main API, PyPI and npm are reachable. Tests never need the network: they use small stored samples.
+15. In that container, the Overpass API and Open-Meteo are blocked; Amazon S3 open data, `s3.opengeohub.org` (GEDTM30), the OpenStreetMap main API, Nominatim, PyPI and npm are reachable. Tests never need the network: they use small stored samples.
 
 ## Commands
 
@@ -47,4 +47,8 @@ These rules apply to every working session, human or AI-assisted. The plan, the 
 | Tests | `uv run pytest` |
 | Viewer: install, format check, type check, unit tests | `cd ui && npm ci && npm run format:check && npm run typecheck && npm test` |
 | Viewer: build, then browser tests (screenshots in `ui/test-results/screens/`) | `cd ui && npm run build && npm run e2e` |
+| Find a place by name | `uv run aircanopy place "NAME"` |
+| Build a site | `uv run aircanopy site build --place "NAME" [--pick N] --size 1000 --name NAME` (or `--around LON,LAT,SIZE`, `--bbox W,S,E,N`) |
 | Open a site in the viewer | `uv run aircanopy view sites/NAME` |
+| Pictures for the journal (from above; then of the running viewer) | `uv run python scripts/figures.py sites/NAME docs/images/NAME`; `node ui/scripts/screenshot.mjs http://127.0.0.1:PORT/ docs/images/NAME [--focus ID LABEL]` |
+| Measurements behind the journal's numbers | `uv run python benchmarks/<script>.py ...` → `results/*.json` (see each script's docstring) |

@@ -160,11 +160,13 @@ Every dataset must have its licence checked before we use it (rule in `CLAUDE.md
 
 | What | Source | Coverage | Licence | Status |
 | --- | --- | --- | --- | --- |
-| Building footprints and heights | Overture Maps (buildings theme), on Amazon S3 | World | ODbL (built from OpenStreetMap and other sources) | to verify |
-| Building footprints, heights, trees, roads | OpenStreetMap (main API for small areas; Overpass where reachable) | World | ODbL 1.0 | to verify |
-| Roads with type and lanes | Overture Maps (transportation theme) | World | ODbL | to verify |
-| Terrain height | Copernicus DEM GLO-30, on Amazon S3 | World, 30 m | Copernicus DEM licence (free use with attribution) | to verify |
-| Tree canopy height | Meta and WRI high-resolution canopy height maps, on Amazon S3 | World, 1 m | CC BY 4.0 | to verify |
+| Building footprints and heights | Overture Maps (buildings theme), on Amazon S3 | World | ODbL 1.0 for the theme, plus each source dataset's credit | checked, in use (Step 6) |
+| Building footprints, heights, trees, roads | OpenStreetMap (main API for small areas; Overpass where reachable) | World | ODbL 1.0 | checked, in use (Step 3) |
+| Place names | Nominatim, OpenStreetMap's geocoder | World | ODbL 1.0; usage policy followed | checked, in use (Step 9) |
+| Roads with type and lanes | Overture Maps (transportation theme) | World | ODbL | to verify (roads come from OpenStreetMap for now) |
+| Terrain height | GEDTM30 v1.2, a bare-earth model | World, 30 m | CC BY 4.0 | checked, in use (Step 7) |
+| Terrain height, fallback | Copernicus DEM GLO-30, on Amazon S3 (a surface model: roofs and treetops included) | World, 30 m | Copernicus DEM licence (free use with attribution) | checked, in use (Step 7) |
+| Tree canopy height | Meta and WRI high-resolution canopy height maps v1, on Amazon S3 | World, 1 m | CC BY 4.0 | checked, in use (Step 8); version 2 not used, its licence is not documented |
 | Land cover | ESA WorldCover | World, 10 m | CC BY 4.0 | to verify |
 | Weather | ERA5 reanalysis (Copernicus Climate Data Store); Open-Meteo | World, hourly | Copernicus licence; Open-Meteo terms (free for non-commercial use) | to verify |
 | Background air quality | CAMS (Copernicus Atmosphere Monitoring Service); OpenAQ measurements | World | Copernicus licence; source-dependent | to verify |
@@ -226,6 +228,12 @@ Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-mo
 - [x] Command line: `aircanopy site build` (`site/build.py`, `cli.py`)
 - [x] 3D viewer: `aircanopy view`, layers, click a building to see where its height came from (`ui/`, `view.py`)
 - [x] Build a site from a local OpenStreetMap file, without downloading (`--osm-file`)
+- [x] Find a site by name, listing every candidate (`sources/geocode.py`, `aircanopy place`, `--place`)
+- [x] Tunnels not drawn, bridges drawn as decks, paths inside buildings left out
+- [x] A second, larger site: 1 km of Mong Kok
+- [x] Phase review: build times, heights weighted by volume, known limits ([Step 9](#2026-10-23--step-9--any-place-by-name-a-second-neighbourhood-and-the-p1-review))
+
+P1 is done: its exit check is met (Step 9).
 
 (Later phases are listed in [3.5](#35-phases) and get their own checklists when they start.)
 
@@ -669,6 +677,142 @@ While working on the viewer, `cd ui && npm run dev` serves it with instant reloa
 
 **Next.** P1 is nearly done: a last look at the whole site, and the phase review. Then phase P2: the 3D wind solver.
 
+### 2026-10-23 · Step 9 · Any place by name, a second neighbourhood, and the P1 review
+
+**Goal.** Finish phase P1. Its promise was "type a place and see its buildings, terrain, trees and roads in 3D". Two parts were missing: typing a place's *name*, and showing that the builder copes with a bigger, denser place than the HKU square. Then look hard at what we built, fix what can be fixed now, and write down honestly what is still wrong.
+
+![The 1 km square of Mong Kok in the 3D viewer](docs/images/mongkok_view.jpg)
+
+*A 1 km square of Mong Kok, in Kowloon, built from its name. Blue buildings have heights from their storey counts, white ones a height in the map, peach ones a height estimated from their neighbours. Behind the square, the hills come from the terrain model.*
+
+
+**What we did.**
+
+1. **Places by name.** `aircanopy place NAME` asks OpenStreetMap's geocoder, Nominatim, and lists every place it finds. `aircanopy site build --place NAME --size 1000` builds a square of that size, in metres, around the first place; `--pick 2` takes the second one instead (`sources/geocode.py`, `cli.py`).
+2. **Under and over the street.** Roads and paths in tunnels are no longer drawn on the street. Bridges are drawn as decks that run straight from the ground at one end to the ground at the other. Paths inside buildings are left out.
+3. **A second neighbourhood**: 1 km of Mong Kok, four times the area of the HKU square, with seven times as many buildings.
+4. **Three measuring scripts** for this review, in `benchmarks/`: how long a build takes, what the geocoder answers for a few names, and how much of each site rests on estimated heights.
+5. The viewer now zooms towards the mouse pointer instead of the centre of the screen: on a 1 km site, the building you want is rarely in the middle.
+6. 9 new tests (103 in total).
+
+**Finding a place by name.** A name is not an address. This is what the geocoder answered on 23 October 2026 (`results/place_names.json`):
+
+| You type | The geocoder finds |
+| --- | --- |
+| University of Hong Kong | one place: "Hong-Kong", a fast-food restaurant on Feldstraße in Greifswald, Germany |
+| The University of Hong Kong | one place: the university |
+| Mong Kok | 1. a railway station named "Mong Kok", whose address is in Ma Tau Wai, Kowloon City District; 2. Mong Kok, the district |
+
+So AirCanopy never uses a place silently. It prints every candidate and marks the one it used:
+
+```
+$ aircanopy site build --place "Mong Kok" --pick 2 --size 1000 --name mongkok
+Places found for "Mong Kok" (https://nominatim.openstreetmap.org/search; Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright):
+  1. Mong Kok, Kowloon City flyover, Kau Pui Shek, Ma Tau Wai, Kowloon City District, Kowloon, Hong Kong, China (22.31931, 114.16981) railway/station
+  2. Mong Kok, Yau Tsim Mong District, Kowloon, Hong Kong, China (22.32042, 114.16981) place/suburb   <- used
+```
+
+The site's list of sources keeps the name typed, the number picked and the place found, so anyone can see later where the square came from.
+
+**Why.**
+
+- *Why Nominatim?* It is OpenStreetMap's own geocoder, and its answers are OpenStreetMap data, under the licence we already follow (ODbL). Its usage policy asks for at most one request a second, a User-Agent that names the application, caching of answers, and a way to switch to another server at any time (`docs/sources.md`). AirCanopy does all four; `AIRCANOPY_GEOCODER` points it to another Nominatim server, for example one you run yourself.
+- *Why decks for bridges?* A bridge rests on its two ends. Laid on the ground like a road, it would dip into the valley it crosses.
+- *Why leave tunnels and indoor paths out?* The model is of the open air. Footways will later mark where people breathe the air and feel the heat (phases P4 and P5), so a hallway inside a mall must not count as a pavement. The OpenStreetMap wiki defines `highway=corridor` as "a hallway inside of a building".
+
+**The two sites side by side.** From `results/site_hku.json`, `results/site_mongkok.json` and `results/build_time_*.json`; the builds ran in the cloud container, which has 4 processor cores.
+
+| | HKU | Mong Kok |
+| --- | --- | --- |
+| Square | 500 m | 1 000 m |
+| Buildings | 213 | 1 479 |
+| Tallest | 114 m, from storeys | 255 m, mapped (a part of the Langham Place Office Tower) |
+| Ground inside the square | 24.5 to 155.6 m above sea level | 2.8 to 57.2 m |
+| Roads and paths | 133 and 362 | 592 and 1 044 |
+| Tree crowns found | 174 | 125 |
+| Canopy at least 5 m tall | 20 % of the square | 2.7 % |
+| Grid of 2 m cells | 251 × 251 × 71, 4.5 million cells | 501 × 501 × 131, 32.9 million cells |
+| Downloaded | 3.3 MB | 11.4 MB |
+| First build, with downloads | 22.2 s | 27.8 s |
+| Second build, from the cache | 4.8 s | 10.4 s |
+| 3D scene file | 2.5 MB | 4.4 MB |
+
+(The viewer's panel counts only what it draws: Mong Kok's 591 roads and 1 035 paths leave out the 10 in tunnels.)
+
+![The Mong Kok voxel grid from above, buildings coloured by height](docs/images/mongkok_voxels.png)
+
+*The 32.9 million cells of the Mong Kok grid, seen from above (north up; buildings coloured by their height above the ground, from pale for low to dark blue for 100 m or more; the white bar is 100 m). The dark spots inside paler blocks are towers rising from lower podiums. The thin lines across the ground are the 2 m steps of the terrain in the grid.*
+
+**Looking hard at the result.** This is the review. We looked at both sites in the viewer and from above, checked the buildings that looked odd against their map data, and measured what we found (`benchmarks/site_review.py` → `results/site_review_*.json`).
+
+What is right:
+
+- The tallest building is where it should be: a 255 m part of the Langham Place Office Tower, whose height is mapped in OpenStreetMap, standing on ground 7.8 m above sea level.
+- Buildings, roads and trees sit on the ground, in both sites.
+- The trees match what the canopy map shows, and the map shows how little green Mong Kok has: 2.7 % of the square under canopy at least 5 m tall, against 20 % around HKU.
+
+![The tallest building in Mong Kok selected, with its card](docs/images/mongkok_view_building.jpg)
+
+*The tallest building part selected: 255 m, "mapped (OpenStreetMap height tag)".*
+
+
+![Canopy heights over Mong Kok with crown outlines](docs/images/mongkok_canopy.png)
+
+*The canopy over Mong Kok from above (north up; buildings in grey; brighter green is taller; crowns outlined in yellow, treetops in red; the white bar is 100 m). Most of the canopy is in a few patches on the east side.*
+
+
+What is wrong or uncertain:
+
+1. **Most heights are estimates.** Counting buildings hides how much each one weighs. The wind meets volume, so we also weighted each kind of height by the volume of the buildings that have it:
+
+   | Height from | Mong Kok, share of buildings | Mong Kok, share of volume | HKU, share of buildings | HKU, share of volume |
+   | --- | --- | --- | --- | --- |
+   | Mapped height | 4.3 % | 12.8 % | 0 % | 0 % |
+   | Storeys × 3 m (A-001) | 65.3 % | 59.1 % | 72.3 % | 80.1 % |
+   | Median of the neighbours (A-002) | 25.5 % | 28.1 % | 19.2 % | 19.9 % |
+   | No height (left out of the grid) | 4.9 % | | 8.5 % | |
+
+   Storey counts are real counts with an assumed storey height. The neighbour median says nothing about the building itself, and it carries a quarter of Mong Kok's building volume.
+
+2. **The neighbour estimate fails worst on big, unusual buildings.** The largest building with an estimated height in Mong Kok is the MOKO shopping mall: 12 167 m² of footprint, with no height and no storey count in the map. Its neighbours are mostly residential towers, so it got their median, 57 m. A shopping mall is a different kind of building from the towers around it, and nothing in the data says how tall it is. Its office tower, Grand Century Place Tower 2, is mapped on top of it with 19 storeys: 57 m by A-001, the same as the guessed mall, so in the picture the tower barely shows.
+
+   ![The MOKO mall selected in the viewer: a 57 m drum with an estimated height](docs/images/mongkok_view_moko.jpg)
+
+   *The MOKO mall selected (amber): "57.0 m, estimated: median height of the buildings within 100 m that have one". The light-blue patch on its roof is the top of the office tower that stands on it.*
+
+3. **A tag nobody defined.** 25 buildings in the Mong Kok square and 6 in the HKU square are tagged `location=podium`. The OpenStreetMap wiki does not list `podium` as a value of `location`. It does define `building:levels` as the storeys above the ground, counting any levels skipped below a part. We follow that definition (D-014). But if a mapper counted a tower's storeys from the top of its podium, the tower comes out too short by the podium's height. 10 of the 25 in Mong Kok also say where they start (`building:min_level` or `min_height`), which settles it for them; 15 do not.
+4. **Roofs.** Every building is a block with a flat top. The tags of the Langham Place tower's top part say its upper 11 m is a dome; we draw a box. Open roofs without walls, such as covered walkways, are left out until they can be modelled as thin raised slabs: 43 in the Mong Kok download and 9 in the HKU download. Air flows under them, but they shade the street.
+5. **Bridges are drawn, not yet used.** Inside the Mong Kok square, 157 ways are on bridges, 5.3 km in all: 97 raised walkways (2.5 km) and the rest road bridges and flyovers. People on a raised walkway breathe the air several metres above the street. When phases P4 and P5 work out what people breathe and feel, they must put those people at the walkway's height.
+6. **The ground is coarse and not yet checked.** GEDTM30 gives one height every 30 m, with its own uncertainty of 1.6 m on average over Mong Kok and 3.1 m over HKU, and in the voxel grid slopes become 2 m steps. Inside the Mong Kok square it shows round bumps (the small closed contours in the picture below). This model alone cannot tell whether they are real. The check is a local survey, such as an airborne lidar terrain model where a city publishes one. We will make it when the wind first depends on the ground.
+
+   ![Shaded relief of the ground around Mong Kok with the site square in amber](docs/images/mongkok_terrain.png)
+
+   *The ground from GEDTM30 around Mong Kok (north up; contours every 20 m; the sea in blue; the simulated square in amber; the white bar is 500 m).*
+
+7. **Trees from 2018.** The canopy images were taken on 3 April 2018 (HKU) and 4 October 2018 (Mong Kok), and the map's heights are off by 2.8 m on average. Crowns that touch can merge into one: the widest crowns found, 42.6 m across at HKU and 38.8 m in Mong Kok, may be several trees. Trees lower than 5 m are not counted.
+
+   ![The trees of Mong Kok with the buildings hidden](docs/images/mongkok_view_tree.jpg)
+
+   *Mong Kok's trees with the buildings switched off, and the tallest crown found (18 m) selected. Its card gives the date of the satellite images.*
+8. **Road widths are for drawing only.** Where the map gives no width, a road is drawn 3 m per lane (`docs/assumptions.md`). Traffic, and the fumes and turbulence it makes, come in phase P4.
+
+**P1 exit check.** "A 3D view of a real neighbourhood; tests on stored sample data." Met: two real neighbourhoods in 3D, found by coordinates or by name; 103 Python tests, 14 viewer unit tests and 4 browser tests, all on small stored samples, run on GitHub at every push. The limits above are written down, and none of them blocks the next phase: P2 builds the wind solver on simple shapes whose answers are known, and comes back to these sites when it has passed its tests.
+
+**What to understand.**
+
+- *Geocoding* turns a name or an address into coordinates; *reverse geocoding* does the opposite. A geocoder ranks the places whose names match, and the first is its best guess, not a fact.
+- *Counting versus weighting.* "4.3 % of Mong Kok's buildings have a mapped height" and "12.8 % of its building volume has a mapped height" are both true. For the wind, the second matters more. When a share is quoted, ask: a share of what?
+- *Tags are free-form.* Anyone can invent a new tag value in OpenStreetMap. The meaning comes from the wiki and from how mappers use it. With an undocumented value, the honest course is to follow the documented rule, count the cases, and say so.
+- *Waiting versus working.* For both sites, the first build took 17.4 s longer than the second, although Mong Kok downloaded more than three times as many bytes. This suggests the time goes mostly to waiting for each service to answer, not to moving the bytes.
+
+**Problems and fixes.**
+
+1. *A number from a stopwatch.* The first Mong Kok result said the build took "about 29 s", timed by hand. Rule 6 of `CLAUDE.md` says every number comes from a dated computation, so `benchmarks/build_time.py` now measures it, with and without downloads, and records the machine. The measured first build took 27.8 s.
+2. *Hallways counted as pavements.* 19 indoor paths at HKU and 11 in Mong Kok had been kept as footways. They are now left out and listed with the reason.
+3. *"Mostly walkways"?* The first look at Mong Kok's bridges suggested they were mostly raised walkways. Measured by length, walkways are 2.5 km of the 5.3 km; by count, 97 of 157. Both numbers are now in the review results, so the sentence above can say exactly what is true.
+
+**Next.** Phase P2: the 3D wind solver. Its plan and checklist come first, in Part 4.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -738,6 +882,10 @@ A *digital elevation model* is a grid of ground heights. A *terrain model* (DTM)
 
 Satellites see trees from above: a crown is a bright, textured blob, and its shadow says something about its height. A neural network trained on places where aircraft have measured the canopy with lidar (laser pulses timed from the air) learns to estimate the height of every pixel from the image alone. The result is a canopy height model: how tall the vegetation is above the ground, everywhere. From it, trees are found as peaks with crowns around them. Two limits matter: the image's date (the map can be years old) and the error (2.8 m on average for this map).
 
+### 6.12 Finding a place by name
+
+A *geocoder* turns a name or an address into coordinates (*reverse geocoding* turns coordinates into an address). It keeps a large index of named places, such as every named feature in OpenStreetMap, finds the ones whose names match what you typed, and ranks them. The first answer is the geocoder's best guess, not a fact: many places share a name, and a name typed slightly differently can match something else entirely. That is why AirCanopy shows all the candidates and asks you to pick when the first is wrong.
+
 (More lessons follow as the project reaches them: wall models, trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---
@@ -757,6 +905,8 @@ Satellites see trees from above: a crown is a bright, textured blob, and its sha
 | D-010 | Read Overture Maps directly from its public files (STAC index, Parquet footers, HTTP range requests) with pyarrow, rather than through a database engine or Overture's own download tool | One well-known dependency (pyarrow); every step can be tested offline; it works through the proxy of the cloud container |
 | D-011 | Python 3.12 or newer | rasterio 1.5 needs it, other scientific libraries are dropping 3.11, and the change is cheapest early |
 | D-012 | Ground from GEDTM30 (bare earth) by default; Copernicus GLO-30 only as a fallback that is labelled a surface model; level ground only when asked or when no model can be read, and then said | A surface model puts the ground on roofs and treetops in cities; the label keeps that from passing unnoticed |
+| D-013 | A place found by name is never used silently: every candidate is listed, the one used is marked, and the name typed, the pick and the place are stored with the site | Names are ambiguous: "University of Hong Kong" found a restaurant in Germany. A silent wrong pick would build the wrong place |
+| D-014 | Storeys are counted from the ground, as the OpenStreetMap wiki defines `building:levels`, also for towers tagged with the undocumented `location=podium`; the site review counts those towers | The documented rule is the only one others can check; counting the cases shows how much depends on it |
 | D-009 | Every package version is pinned exactly, and new versions are taken only after they have been out for about two weeks, unless a fix is needed | A build that worked keeps working; very new releases are where most broken or malicious packages are caught |
 
 ---
@@ -767,3 +917,4 @@ Satellites see trees from above: a crown is a bright, textured blob, and its sha
 2. **Graphics card.** Do you have an NVIDIA graphics card on your own computer? If not, large runs will go to Google Colab or a rented GPU.
 3. **First demonstration place.** Hong Kong (near HKU), or somewhere else?
 4. **Commit email.** Commits use your GitHub noreply address. If you would rather use your personal email, say so.
+5. **Measured building heights for one city first?** In both test sites, a fifth to over a quarter of the building volume rests on heights guessed from neighbours (Step 9). Some cities publish measured 3D buildings under open licences. Adding one city (Hong Kong, where both test sites are) would fix this there, but only there, and take time away from the wind solver. Add one city now, or keep to worldwide sources until P2 is done?

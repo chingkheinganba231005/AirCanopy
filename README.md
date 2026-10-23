@@ -27,14 +27,20 @@ Needs Python 3.12 or newer and [uv](https://docs.astral.sh/uv/).
 uv sync
 # A 500 m square around a point (longitude, latitude, size in metres):
 uv run aircanopy site build --around 114.1370,22.2840,500 --name hku
+# Or by name: list the places that match, then build around the one you mean
+uv run aircanopy place "Mong Kok"
+uv run aircanopy site build --place "Mong Kok" --pick 2 --size 1000 --name mongkok
 ```
 
-This downloads OpenStreetMap and Overture Maps buildings and the GEDTM30 terrain model for the
-area (`--no-overture` and `--terrain flat|copernicus` change that) and writes `sites/hku/` with
-the site model
-(`site.json`), a 3D scene for viewing (`scene.glb`, opens in any glTF viewer), the voxel grid for
-the physics (`voxels.npz`) and a summary that says how many building heights were mapped,
-estimated from storeys or estimated from neighbours (`summary.json`).
+This downloads OpenStreetMap and Overture Maps buildings, the GEDTM30 terrain model and the
+Meta/WRI canopy height map for the area (`--no-overture`, `--terrain flat|copernicus` and
+`--no-canopy` change that) and writes `sites/hku/` with the site model (`site.json`), a 3D scene
+for viewing (`scene.glb`, opens in any glTF viewer), the voxel grid for the physics
+(`voxels.npz`) and a summary that says how many building heights were mapped, estimated from
+storeys or estimated from neighbours (`summary.json`). A 1 km square takes about half a minute
+on a small machine, most of it spent waiting for downloads.
+
+![A 1 km square of Mong Kok in the viewer, built from its name](docs/images/mongkok_view.jpg)
 
 To look at the site in 3D, build the viewer once (needs [Node.js](https://nodejs.org/) 22) and open
 it:

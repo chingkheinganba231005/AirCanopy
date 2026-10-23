@@ -32,3 +32,4 @@ never reads them.
 | 1 km of ground around the site | the surroundings drawn in the 3D view; the physics uses only the site's square | `site/build.py`, `CONTEXT_M` |
 | 0.15 m (roads), 0.2 m (footways) | how far above the ground roads and paths are drawn, so the ground does not show through them | `site/mesh.py`, `DISPLAY_ROAD_LIFT_M`, `DISPLAY_FOOTWAY_LIFT_M` |
 | 3 m | width of the band that marks the edge of the simulated area | `site/mesh.py`, `DISPLAY_OUTLINE_WIDTH_M` |
+| A straight deck from the ground at one end of a bridge to the ground at the other, never below the ground | the drawn height of a road or path on a bridge, which the map does not give | `site/mesh.py`, `_draped` |
