@@ -28,6 +28,14 @@ dev = [
   "pytest>=8.3",
   "ruff>=0.8",
 ]
+docs = [
+  "matplotlib==3.11.2",
+]
+
+[tool.uv]
+# Packages released in the last two weeks are held back (D-009): uv ignores anything published
+# after this date. Move the date forward to take newer releases, then run the tests.
+exclude-newer = "2026-10-09T00:00:00Z"
 
 [build-system]
 requires = ["hatchling>=1.27"]
