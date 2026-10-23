@@ -30,6 +30,7 @@ import numpy as np
 
 from aircanopy.wind.lattice import CS2, D3Q19
 from aircanopy.wind.solver import Params, Solver
+from aircanopy.wind.walls import KAPPA
 
 jax.config.update("jax_enable_x64", True)
 
@@ -231,12 +232,56 @@ def tgv_dissipation(out: Path) -> None:
     plt.close(fig)
 
 
+def abl_profiles(out: Path) -> None:
+    """The neutral boundary layer: mean wind against height over the roughness length (log
+    scale, on which the law of the wall is one straight line for every run), and
+    phi = (kappa z / u*) dU/dz, which is 1 on the law of the wall."""
+    path = ROOT / "results" / "wind_abl_cpu.json"
+    runs = sorted(json.loads(path.read_text())["runs"], key=lambda r: (-r["h"], r["smagorinsky"]))
+    fig, (left, right) = plt.subplots(1, 2, figsize=(8.6, 4.6), dpi=150, facecolor=SURFACE,
+                                      sharey=True)  # fmt: skip
+    for ax in (left, right):
+        _style(ax)
+        ax.set_yscale("log")
+    z0 = runs[0]["z0"]
+    tallest = max(r["h"] for r in runs)
+    z = np.geomspace(0.5, tallest, 50)
+    left.plot(np.log(z / z0) / KAPPA, z / z0, color=INK, linewidth=2.2, label="law of the wall")
+    for k, r in enumerate(runs):
+        colour = SERIES[k % len(SERIES)]
+        label = f"Cs = {r['smagorinsky']}, H = {r['h']} cells"
+        left.plot(np.asarray(r["mean_u"]) / r["u_star"], np.asarray(r["z"]) / r["z0"],
+                  color=colour, linewidth=1.8, marker="o", markersize=3, label=label)  # fmt: skip
+        right.plot(r["phi"], np.asarray(r["z_phi"]) / r["z0"], color=colour, linewidth=1.8,
+                   marker="o", markersize=3, label=label)  # fmt: skip
+    right.axvline(1.0, color=INK, linewidth=1.6)
+    # The curves' lowest points sit near phi = 1, so a legend there would hide them: the left
+    # panel's legend serves both, and the line is labelled where it is.
+    right.text(1.03, 0.5 / z0 * 1.15, "law of the wall", color=INK, fontsize=8, va="bottom")
+    for ax in (left, right):  # where the criterion applies, for the tallest box
+        ax.axhspan(2 / z0, 0.2 * tallest / z0, color=GRID, alpha=0.6, zorder=0)
+    left.set_xlabel("mean wind U / u*", color=INK)
+    left.set_ylabel("height z / z0 (log scale)", color=INK)
+    right.set_xlabel("phi = (kappa z / u*) dU/dz", color=INK)
+    left.set_title("Mean wind", color=INK, fontsize=10, loc="left")
+    right.set_title("Shear, scaled: 1 on the law of the wall", color=INK, fontsize=10,
+                    loc="left")  # fmt: skip
+    left.legend(frameon=False, fontsize=8, labelcolor=INK, loc="upper left")
+    title = (f"Neutral boundary layer over a rough floor (band: where the criterion applies for "
+             f"H = {tallest} cells)")  # fmt: skip
+    fig.suptitle(title, color=INK, fontsize=10.5, x=0.02, ha="left")
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+
+
 def main() -> None:
     images = ROOT / "docs" / "images"
     lattices(images / "wind_lattices.png")
     convergence(images / "wind_convergence.png")
     taylor_green_fields(images / "wind_taylor_green.png")
     tgv_dissipation(images / "wind_tgv1600.png")
+    abl_profiles(images / "wind_abl.png")
 
 
 if __name__ == "__main__":

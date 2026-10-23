@@ -27,8 +27,10 @@ moving in direction c_i. One step:
        f_post_i = f_eq_i + (1 - 1/tau) w_i (9/2) c_i c_i : P_d + S_i / 2,
    with S_i the Guo forcing term. Shear stresses relax as in the plain BGK collision. The
    higher moments, which BGK lets ring when tau is close to 1/2, and the bulk stress, which
-   carries sound, relax fully every step (Dellar 2001). This keeps the scheme stable at the
-   tiny viscosity of air on a city-sized grid.
+   carries sound, relax fully every step (Dellar 2001). This was meant to keep the scheme
+   stable at the tiny viscosity of air on a city-sized grid. It does not when the wind is
+   fast: in a uniform wind at Mach 0.13 with almost no viscosity, noise one cell long grows
+   until the run fails (JOURNAL.md, Step 12).
 
 Solid cells keep the values streamed into them; no fluid cell ever reads them.
 """

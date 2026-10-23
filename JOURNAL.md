@@ -269,14 +269,16 @@ P1 is done: its exit check is met (Step 9).
 *Real scale*
 
 - [ ] Open boundaries: velocity inlet, outflow, absorbing layers
-- [ ] Wall model for rough surfaces (law of the wall with a roughness length)
-- [ ] A neutral atmospheric boundary layer over rough ground: the mean wind follows the logarithmic law and stays the same along the domain
+- [x] Wall model for rough surfaces (law of the wall with a roughness length): free-slip floors and a drag in the first cell of air (Step 11)
+- [ ] A neutral atmospheric boundary layer over rough ground: the mean wind follows the logarithmic law and stays the same along the domain (first runs in Step 11: mixed results, and numerical noise near the lid, Step 12)
 - [ ] Turbulent inflow for real sites (a separate run of the boundary layer feeding the inlet, or synthetic eddies), chosen by test
 
 *Validation, and a first real run on a graphics card*
 
-- [ ] Flow around a cube on the floor of a channel, against wind-tunnel measurements (Martinuzzi and Tropea 1993; Hussein and Martinuzzi 1996), with the pass criteria written down from the papers before the run, at two speeds (to measure the effect of the Mach number, Step 10)
-- [ ] A Colab notebook that runs the large cases on a graphics card and records what it ran; speed on the graphics card
+- [ ] The cube's approach flow: a periodic channel whose wall friction is matched to the measured profile upstream of the cube (ERCOFTAC case 041, x/H = −18), used as the cube's inflow
+- [ ] Flow around a cube on the floor of a channel, against wind-tunnel measurements (Martinuzzi and Tropea 1993; data: ERCOFTAC case 041), with the pass criteria written down before the run, at two speeds (to measure the effect of the Mach number, Step 10)
+- [x] A Colab notebook that runs the large cases on a graphics card and records what it ran (`colab/wind_gpu.ipynb`, Step 11)
+- [ ] Its first run: speed on a graphics card, and the Taylor–Green vortex at 256³
 - [ ] Wind through the HKU site from one direction: mean wind speed 1.5 m above the ground, and streamlines, in the viewer, labelled *simulated*
 - [ ] Phase review
 
@@ -953,6 +955,88 @@ D3Q27 gave the same accuracy in all three tests and is a third to a half slower,
 
 **Next.** The 3D Taylor–Green vortex at Reynolds number 1600, the first test with real turbulence, which needs a graphics card at full size; then open boundaries, the wall model and the atmospheric boundary layer.
 
+### 2026-10-23 · Step 11 · Real turbulence, a notebook for the graphics card, and rough ground
+
+**Goal.** Three things the city needs before the solver can be trusted there: a test with real turbulence; a way to run cases too big for the processor; and the friction of the ground on a grid of metre-sized cells (a *wall model*), checked in an atmospheric boundary layer.
+
+**Real turbulence: the 3D Taylor–Green vortex at Reynolds number 1600.** The same kind of vortices as in Step 10, but varying in all three directions. They stretch, break into ever smaller eddies (turbulence) and then die away. It is problem C3.5 of the 1st International Workshop on High-Order CFD Methods, whose reference is a simulation on 512³ points with a spectral method, a method without the errors of a grid like ours, which the workshop states to be converged (`docs/sources.md`). The rate at which the vortices lose kinetic energy, the *dissipation rate*, peaks near t ≈ 9 (in units of L/V0).
+
+The pass criteria were written down before the first run: on 256³ cells with no turbulence model, the peak within 5 % of the reference's peak, and at a time within 0.5 units of it. Coarser grids are recorded without pass or fail. The workshop itself asks for about 256³ "degrees of freedom" as its baseline, so we did not expect coarser grids to pass.
+
+What the processor could run (`results/wind_tgv1600_cpu.json`):
+
+| Grid | Peak dissipation | At time | Peak against reference | Largest error in kinetic energy (÷ V0²) | Time on 4 cores |
+| --- | --- | --- | --- | --- | --- |
+| 32³ | 0.0134 | 7.0 | +4.4 %, two time units early | 0.021 | 11 s |
+| 64³ | 0.0121 | 8.9 | −5.7 % | 0.0055 | 74 s |
+| 128³ | 0.0120 | 8.8 | −6.8 % | 0.0028 | 18 min |
+| reference | 0.01286 | 9.0 | | | |
+
+![Dissipation rate against time for three grids and the reference](docs/images/wind_tgv1600.png)
+
+*How fast the vortices lose energy, on three grids, against the reference (black). On 32³ the energy drains far too early. 128³ follows the reference closely until t ≈ 8.5, then dips below it where the reference has a shoulder, near t ≈ 9.7.*
+
+
+The kinetic energy converges as the grid is refined (its largest error halves from 64³ to 128³), but the peak of the dissipation rate does not yet: 128³ is slightly further from it than 64³. The test that counts is 256³, on a graphics card. With the Smagorinsky model switched on (Cs = 0.1), the coarse grids do worse (64³: 7.9 % low, 0.7 units early). That is a known weakness of the model, visible from its formula: it adds viscosity wherever the air is sheared, turbulent or not, so it slows the vortices while they are still smooth.
+
+**A notebook for the graphics card.** `colab/wind_gpu.ipynb` runs on Google Colab:
+
+1. It installs exactly the locked versions, in their own environment, plus JAX's support for NVIDIA cards.
+2. It measures the solver's speed on 128³ and 256³ cells.
+3. It runs the Taylor–Green vortex on 256³ with both velocity sets, and on 128³ to check the processor's run.
+4. It packs the results with a manifest (the commit, the card, the time, a SHA-256 for each file) into a zip.
+
+To run it: open https://colab.research.google.com/github/chingkheinganba231005/AirCanopy/blob/main/colab/wind_gpu.ipynb, choose *Runtime → Change runtime type → GPU*, then *Runtime → Run all*, and upload the zip it downloads into a Claude session. `scripts/colab_unpack.py` checks a zip before anything from it enters `results/`: only `.json` files under `results/`, each matching its SHA-256, and a commit that exists in this repository.
+
+**The friction of rough ground: a wall model.** In a real street the wind slows to zero in a layer of air millimetres thick against every surface. A grid of 2 m cells cannot resolve it, so its effect is put in by hand (A-010):
+
+1. Floors (air above solid) become *free-slip*: a packet arriving from below is reflected like light off a mirror instead of bouncing straight back, so the air can glide.
+2. The first cell of air above a floor feels the friction that the *law of the wall* gives for a rough surface. Over ground of *roughness length* z0, the mean wind at height z is U(z) = (u*/κ) ln(z/z0), where u* is the *friction velocity* (the ground's shear stress is ρu*²) and κ the von Kármán constant. From the wind U1 in the first cell, half a cell above the floor, this gives a stress ρ C_d U1² with C_d = (κ / ln(z1/z0))², applied as a drag in that cell.
+
+The drag depends on the velocity it changes. As in the 2D solver for tree crowns, the velocity is solved for exactly (a short formula), so a strong drag cannot make the step unstable. The same drag field will later carry the leaves of trees (phase P3). For κ we use "the canonical value 0.40"; measurements give between about 0.37 and 0.43 depending on the flow (Andreas et al. 2006; Nagib and Chauhan 2008), so C_d alone is uncertain by about ±10 %.
+
+Tests: a free-slip floor is an exact mirror (to 10⁻¹⁶); a uniform wind glides over it without friction; and in a steady channel the floor's friction balances the push on the column to 1 part in a million.
+
+**The test of the wall model: wind over rough ground.** The cleanest test of a wall model is the *atmospheric boundary layer* ([6.15](#615-the-wind-near-the-ground-the-law-of-the-wall)): wind over a wide stretch of flat, rough ground. Our version (`wind/boundary_layer.py`) is a box of air 64 cells long, 32 wide and 32 tall that repeats in both horizontal directions, so it behaves like an endless field. The floor is rough, with a roughness length of 0.05 cells, and the top is a free-slip lid. A push that is the same everywhere drives the wind along x, as a pressure difference across a whole region does in the atmosphere. The molecular viscosity is almost zero, as real air's is on metre-sized cells, so all friction inside the air comes from the Smagorinsky model.
+
+Why this case: once the wind is steady on average, the floor must hold back the push on the whole column of air above it. That fixes the ground's shear stress exactly, ρu*² = ρgH, and with it the friction velocity u*. The law of the wall then predicts the mean wind near the floor with no free parameter. The air starts on that profile with random gusts of 30 % added, which grow into turbulence. After 10 *eddy turnovers* (the time H/u* in which the largest eddies turn over once), the wind is averaged over 10 more, in time and over each horizontal layer.
+
+The pass criteria were written down before the first run, in `benchmarks/wind_abl.py`:
+
+1. the floor's mean friction equals the push within 2 %;
+2. in the *surface layer*, from 2 cells above the floor to a fifth of the height, the mean wind is within 10 % of the law of the wall.
+
+Also recorded, without pass or fail: the scaled shear φ = (κz/u*) dU/dz, which is exactly 1 on the law of the wall. Large-eddy simulations with the Smagorinsky model are known to miss the logarithmic profile near the ground, with a peak ("overshoot") of φ there (Mason and Thomson 1992; Brasseur and Wei 2010).
+
+The first run used Cs = 0.1, one of the values Hou et al. (1994) tested in the lattice Boltzmann form of the model. It failed criterion 2. Two more runs followed: one with Cs = 0.17, the value usually derived from theory for turbulence far from walls (Lilly; UNVERIFIED, because his report is behind a bot check from this container, `docs/sources.md`), and one in a smaller box, to see how the result depends on the height. Results (`results/wind_abl_cpu.json`):
+
+| Box (cells) | Cs | Friction ÷ push | 1. Balance (2 %) | Mean wind ÷ law of the wall, worst in the surface layer | 2. Law of the wall (10 %) | Time on 4 cores |
+| --- | --- | --- | --- | --- | --- | --- |
+| 64 × 32 × 32 | 0.10 | 0.998 | pass | 0.899 | **fail** | 310 s |
+| 64 × 32 × 32 | 0.17 | 1.016 | pass | 0.920 | pass | 307 s |
+| 48 × 24 × 24 | 0.17 | 1.036 | **fail** | 0.936 | pass | 116 s |
+
+![Mean wind and scaled shear against height for the three runs](docs/images/wind_abl.png)
+
+*Left: the mean wind against height, with height on a log scale so that the law of the wall is a straight line. Right: the scaled shear, 1 on the law of the wall. The grey band is the surface layer of the 32-cell box, where criterion 2 applies. Simulated.*
+
+What the runs show:
+
+1. *The wind is too slow, more so with height.* In all three runs the mean wind is below the law of the wall: by 2 to 4 % in the first cell, and by up to 8 to 10 % at the top of the surface layer. The scaled shear is between about 0.6 and 0.8 from 2 to 8 cells above the floor, where the law says 1: the wind changes too little with height. That is an undershoot, the opposite of what the literature reports for other codes, so the published explanation does not carry over.
+2. *Why the first cell is slow.* The floor's friction is ρ C_d |U| u, applied to the wind of each moment. Gusts make the average of |U| u larger than the square of the average wind, while the balance fixes the average friction. So the average wind in the first cell has to drop below the law. Brasseur and Wei (2010) also found that the model of the surface stress disturbs the law of the wall "at the first couple grid levels".
+3. *Criterion 1 tests less than I thought when I wrote it.* In this box, momentum is conserved exactly: only the push and the floor's friction change it. So the friction can differ from the push only while the column speeds up or slows down. A friction 3.6 % above the push, over the 10 turnovers of averaging, means the column's mean wind fell by about 0.36 u* (the push adds u*²/H per step to every cell, and 10 turnovers are 10 H/u* steps). The criterion tests whether a run has settled, not whether the wall model is right. The 24-cell box had not settled.
+4. *Noise.* Near the lid, the φ curve of the Cs = 0.1 run swings from 0 to 2. A rerun that saved the wind itself showed why: near the lid, the vertical wind flips sign from one cell to the next along the wind direction. Turbulence is smooth at the scale of one cell, so this is numerical noise, not air. With Cs = 0.17 the noise was weaker and stayed in the top quarter of the box. The same rerun showed the column's mean wind still falling after 10 turnovers. Step 12 follows the noise to its source.
+
+So the boundary-layer item in Part 4 stays open: the averages above are a record of where the solver stood, not a validation.
+
+**Problems and fixes.**
+
+- The test that a free-slip floor is an exact mirror compared the mirrored packets against a threshold that D3Q27 missed by a hair (0.000988 against 0.001): the test was meant to check that something is mirrored at all, so its guard is now 10⁻⁴.
+- The first test of the floor's balance stopped before the flow had settled: in a channel driven by a push, the wind approaches its steady value slowly. It now starts near the expected value and runs until the change per check is below 10⁻¹².
+- The first picture of the boundary layer plotted height over H, which puts the law of the wall in a different place for each box; the picture now uses height over the roughness length, on which the law is one line for every run.
+
+**Next.** Find the source of the noise before anything else, because every later run, the cube's and the city's, has fast wind and almost no viscosity. Then the cube on the floor of a channel. Its walls are smooth, and the layer in which the wind slows to zero against them is very thin. Near the floor, the measured shear stress upstream of the cube is about 0.0023 Ub² (ERCOFTAC case 041, x/H = −18), a friction velocity of about 0.05 Ub. At the experiment's Reynolds number, that makes the layer's thickness scale ν/u* about H/2000, so resolving it would take thousands of cells across the channel. Instead, the channel's wall friction will be matched to the measured profile upstream of the cube, and the flow around and behind the cube is what will be judged.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -1043,7 +1127,20 @@ The lattice Boltzmann method simulates a real gas instead, with a speed of sound
 
 In the real atmosphere a breeze moves at a tiny fraction of the speed of sound, so real air in a street is very nearly incompressible. On the lattice we let the wind go relatively much faster, up to Ma 0.17 (A-009), because a faster lattice speed means a longer time step and fewer steps to simulate. The price is a small compressibility error that real air does not have. Step 10 measured it in a simple flow, and the cube test will measure it in a city-like one.
 
-(More lessons follow as the project reaches them: wall models, trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
+### 6.15 The wind near the ground: the law of the wall
+
+Wind blowing over the ground is slowed by it: right at the surface the air does not move, and higher up it moves faster. The layer of air the ground slows down is the *boundary layer*. In its lowest part, the *surface layer*, and when the ground is neither strongly heated nor cooled (*neutral* conditions), the average wind follows a simple rule:
+
+U(z) = (u*/κ) ln(z/z0)
+
+- z is the height above the ground.
+- z0, the *roughness length*, describes the ground. It is not the height of the bumps but a length that says how strongly they grip the wind: small over water or short grass, larger over bushes, forests and towns.
+- u*, the *friction velocity*, measures how hard the wind pulls on the ground: the ground's shear stress (force per area) is ρu*².
+- κ ≈ 0.40 is the von Kármán constant, a number found by experiment.
+
+On a graph with height on a logarithmic scale, the rule is a straight line: every tenfold increase in height adds the same amount to the wind, ln(10) u*/κ ≈ 5.8 u*. A *wall model* uses the rule backwards: from the wind in the first cell of the grid, it works out the friction the ground must exert, so the grid does not need to resolve the thin layer where the wind actually reaches zero.
+
+(More lessons follow as the project reaches them: trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---
 
