@@ -19,6 +19,8 @@ export interface BuildingRecord {
   base_source: string;
   kind: string;
   part: boolean;
+  footprint_source?: string; // "osm", or "overture:<dataset>"
+  height_dataset?: string | null; // for a height from Overture: the dataset that gave it
 }
 
 export interface TreeRecord {
@@ -95,6 +97,10 @@ export interface SummaryJson {
   skipped: number;
   voxels: { dx_m: number; shape_zyx: [number, number, number]; building_cells: number };
   assumptions: Assumptions;
+  height_kinds?: Record<string, number>;
+  footprint_sources?: Record<string, number>;
+  overture?: { release?: string; error?: string; added?: number } | null;
+  credits?: { dataset: string; credit: string; licence: string; buildings: number }[];
   sources: SourceRecord[];
 }
 

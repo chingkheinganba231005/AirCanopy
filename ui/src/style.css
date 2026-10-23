@@ -278,3 +278,7 @@ dd {
     bottom: calc(42vh + 24px);
   }
 }
+
+.credits li {
+  font-size: 12.5px;
+}

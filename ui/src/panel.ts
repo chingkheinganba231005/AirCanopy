@@ -3,6 +3,7 @@
 import {
   centreText,
   count,
+  footprintSourceText,
   heightSourceText,
   metres,
   osmUrl,
@@ -65,6 +66,19 @@ export function renderPanel(
     );
   };
   const byKey = (k: string) => layers.filter((l) => l.key.startsWith(k));
+  const credits = (summary.credits ?? []).map((c) =>
+    h(
+      "li",
+      {},
+      c.credit,
+      h(
+        "span",
+        { class: "muted" },
+        ` (${c.licence}${c.buildings > 0 ? `; ${count(c.buildings)} buildings` : ""})`,
+      ),
+    ),
+  );
+  const overtureError = summary.overture?.error;
   const sources = summary.sources.map((s) =>
     h(
       "li",
@@ -144,6 +158,9 @@ export function renderPanel(
         { class: "sources" },
         h("h2", {}, "Data"),
         h("ul", {}, ...sources),
+        credits.length > 0 && h("p", { class: "muted" }, "Datasets used, with their credits:"),
+        credits.length > 0 && h("ul", { class: "credits" }, ...credits),
+        overtureError && h("p", { class: "note" }, overtureError),
         h("p", { class: "muted" }, `Site built ${site.created}.`),
         h(
           "p",
@@ -185,7 +202,11 @@ export function renderInfo(
       title = b.part ? "Building part" : "Building";
       rows.push(
         row("Height", metres(b.height)),
-        row("Height from", heightSourceText(b.height_source, summary.assumptions)),
+        row(
+          "Height from",
+          heightSourceText(b.height_source, summary.assumptions, b.height_dataset ?? null),
+        ),
+        row("Outline from", footprintSourceText(b.footprint_source)),
         row("Base", metres(b.base)),
         row("Footprint", `${count(polygonArea(b.footprint))} m²`),
         row("Type", b.kind),

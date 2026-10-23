@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   centreText,
   count,
+  footprintSourceText,
   heightSourceText,
   metres,
   osmUrl,
@@ -47,6 +48,20 @@ describe("words for the data", () => {
     expect(heightSourceText("osm:height", ASSUMPTIONS)).toMatch(/^mapped/);
     expect(heightSourceText("missing", ASSUMPTIONS)).toBe("unknown");
     expect(heightSourceText("something:new", ASSUMPTIONS)).toBe("something:new");
+    expect(heightSourceText("overture:height", ASSUMPTIONS, "USGS Lidar")).toBe(
+      "given by Overture Maps, from USGS Lidar",
+    );
+    expect(heightSourceText("overture:num_floors", ASSUMPTIONS, null)).toContain(
+      "dataset not stated",
+    );
+  });
+
+  it("says where an outline came from", () => {
+    expect(footprintSourceText(undefined)).toBe("OpenStreetMap");
+    expect(footprintSourceText("osm")).toBe("OpenStreetMap");
+    expect(footprintSourceText("overture:Microsoft ML Buildings")).toBe(
+      "Overture Maps: Microsoft ML Buildings",
+    );
   });
 
   it("links OpenStreetMap ids, including parts of a relation", () => {

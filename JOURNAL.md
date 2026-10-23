@@ -212,7 +212,7 @@ Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-mo
 - [x] Coordinates: from latitude and longitude to local metres (`geo.py`)
 - [x] Downloads cached with their source, time, licence and checksum (`sources/cache.py`)
 - [x] Buildings from OpenStreetMap, with heights and where each height came from (`sources/osm.py`, `site/`)
-- [ ] Buildings from Overture Maps (worldwide footprints and heights)
+- [x] Buildings from Overture Maps (worldwide footprints and heights), joined to OpenStreetMap (`sources/overture.py`, `site/from_overture.py`)
 - [ ] Terrain from Copernicus DEM
 - [x] Trees from OpenStreetMap (position, height, crown, species when mapped)
 - [ ] Trees from the canopy height map (to fill heights and find unmapped trees)
@@ -398,7 +398,7 @@ print(len(site.buildings), site.buildings[0].height, site.buildings[0].height_so
 uv run aircanopy site build --around 114.1370,22.2840,500 --name hku
 ```
 
-took about 3 seconds and wrote `sites/hku/` (not stored in git; anyone can rebuild it with the same command). Its summary is saved in `results/site_hku.json`. In the 500 m square around HKU:
+took about 3 seconds and wrote `sites/hku/` (not stored in git; anyone can rebuild it with the same command). Its summary is saved in `results/site_hku_osm_only.json`. In the 500 m square around HKU:
 
 - 199 buildings: 154 heights from storey counts, 32 estimated from neighbours, 13 still without a height (these are left out of the grid and counted in the summary). The tallest is 114 m.
 - 6 trees, none with a mapped height, so none is drawn yet. Trees need the satellite canopy height map.
@@ -504,6 +504,43 @@ While working on the viewer, `cd ui && npm run dev` serves it with instant reloa
 
 **Next.** Better building heights from Overture Maps, trees from the satellite canopy height map, and terrain from the Copernicus elevation model; then phase P2, the 3D wind solver.
 
+### 2026-10-23 · Step 6 · A second, worldwide source of buildings: Overture Maps
+
+**Goal.** Make sites work anywhere in the world. In many countries OpenStreetMap has few buildings; satellite-traced footprints and measured heights exist, and Overture Maps gathers them in one place.
+
+**What we did.**
+
+1. `sources/overture.py` reads Overture's building data straight from Amazon S3. It reads only the few megabytes a site needs out of 277 GB (see *What to understand*).
+2. `site/from_overture.py` joins Overture's buildings to the OpenStreetMap ones without counting any building twice.
+3. Heights now come in five kinds, from most to least trusted: measured by lidar, mapped, from storeys, machine-learning estimate, estimated from neighbours (assumption A-003). Each building keeps the most trusted height available, and the viewer colours buildings by kind.
+4. Every dataset used is credited in the site summary and in the viewer, with its licence and how many buildings came from it.
+5. `--no-overture` builds from OpenStreetMap alone. If Overture cannot be reached, the site is still built and the summary says why.
+6. 8 new tests, using a real 20 kB Overture sample of the HKU test box (`tests/data/overture/`) and a small web server inside the tests that answers range requests like S3 does.
+
+**What Overture added around HKU** (`results/site_hku.json`). 14 building outlines that OpenStreetMap does not have, traced from satellite images by Shi et al. (2023) for East Asia; 213 buildings in all. Overture had no new heights here, only the same storey counts as OpenStreetMap. Elsewhere it does. In a sample of 15 926 buildings in the central United States, 14 523 had a height, 804 of them measured by USGS lidar. In a sample of 17 804 from central France, 5 943 had one, 5 563 of those estimated by Microsoft's machine learning (`results/overture_probe.json`).
+
+**Why.**
+
+- *Worldwide.* OpenStreetMap is rich in some cities and nearly empty in others. Overture adds footprints traced by machine learning (Microsoft, Google, Shi et al.) and heights from lidar and machine learning, with the source of every value.
+- *Join, don't stack.* Overture already contains OpenStreetMap's buildings. Taking both whole would draw most buildings twice. So an Overture building that came from OpenStreetMap only lends a better height to the one we have, and a footprint from another dataset is added only where the map has no building (A-004).
+- *Not all heights are equal.* A lidar height is measured, and a storey count times 3 m is a rough rule. A machine-learning estimate can be off by several metres. Keeping the kind with every height lets every later result say how much it rests on each kind.
+- *Credit is a duty.* The CC BY 4.0 licence of some datasets requires credit wherever the data are shown, so the credits travel with the site into the viewer.
+
+**What to understand.**
+
+- *Parquet* is a file format for big tables, stored column by column and in blocks of rows (*row groups*). Its *footer*, at the end of the file, records for every row group and column the smallest and largest value. If our site lies outside a row group's range of longitudes and latitudes, that block cannot hold any of our buildings and is never downloaded.
+- *HTTP range requests* ask a web server for bytes 1 000 000 to 1 999 999 of a file instead of the whole file. With them, a 500 MB file on S3 can be read like a local file, piece by piece. The HKU site needed 1 of the 512 files and 1 of its 128 row groups: 4 requests and 6.6 MB, of which 0.7 MB was the footer (`results/overture_probe.json`).
+- *STAC* (SpatioTemporal Asset Catalog) is a standard way to publish an index of geographic files: which files exist, and what area each covers. Overture's tells us which 1 or 2 of the 512 files to open.
+- *Data provenance* means the record of where each value came from. Each building now carries the dataset its outline came from and the dataset its height came from.
+
+**Problems and fixes.**
+
+1. *A transient network failure.* The first request to S3 came back empty. On a second try it worked. Downloads now retry up to four times, waiting 1, 2 and 4 seconds in between.
+2. *A test that could not show what it claimed.* The real sample is only 20 kB, smaller than the first piece pyarrow reads, so it was fetched whole. A synthetic 3 MB file now shows that reading one of three row groups transfers less than a tenth of the file.
+3. *A result file overwritten.* Step 4 cited `results/site_hku.json`, which this step replaced with the new build. The earlier result was restored from git as `results/site_hku_osm_only.json`, and Step 4 now points to it, so every number in this journal can still be traced.
+
+**Next.** Terrain from the Copernicus 30 m elevation model: HKU sits on a steep hillside, and the ground is not flat. Then trees from the satellite canopy height map.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -581,6 +618,7 @@ A screen pixel's number is not proportional to the light it gives. In *sRGB*, th
 | D-006 | Missing values are filled only from the data themselves (for example the median height of neighbouring buildings), labelled, and counted in the site summary; never with one fixed default | A fixed default hides the gap; a labelled estimate shows how much of a result rests on estimates |
 | D-007 | The scene for drawing (meshes) and the grid for the physics (voxels) are both made from the same site model | They can never disagree about where a building is |
 | D-008 | The viewer is plain TypeScript with three.js, built with Vite; no interface framework for now | Small and easy to learn from; three.js is the most used WebGL library; a framework can come later if the panels grow |
+| D-010 | Read Overture Maps directly from its public files (STAC index, Parquet footers, HTTP range requests) with pyarrow, rather than through a database engine or Overture's own download tool | One well-known dependency (pyarrow); every step can be tested offline; it works through the proxy of the cloud container |
 | D-009 | Every package version is pinned exactly, and new versions are taken only after they have been out for about two weeks, unless a fix is needed | A build that worked keeps working; very new releases are where most broken or malicious packages are caught |
 
 ---

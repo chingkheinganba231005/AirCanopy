@@ -7,6 +7,8 @@ checked. Anything that could not be checked is marked `UNVERIFIED`.
 
 | Data | Source | Licence | Checked |
 | --- | --- | --- | --- |
+| Overture Maps buildings (footprints, heights, storey counts, with the dataset behind each) | Release 2026-10-21.0, GeoParquet on Amazon S3, found through the STAC catalogue `https://stac.overturemaps.org/catalog.json` | Theme licence ODbL-1.0 (stated in the STAC collection and on `https://docs.overturemaps.org/attribution/`). Credit "© OpenStreetMap contributors, Overture Maps Foundation", plus each dataset's own credit, listed in `sources/overture.py` from the attribution page | 2026-10-23 |
+| East Asian building footprints inside Overture | Qian Shi, Jiajun Zhu, Zhengyu Liu, Haonan Guo, Mengxi Liu, Zihong Liu, "A first high-quality vector data of buildings in East Asian countries based on a comprehensive large-scale mapping framework", Zenodo, 2023-07-22, doi:10.5281/zenodo.8174931 | CC BY 4.0 (Zenodo record metadata) | 2026-10-23 |
 | OpenStreetMap (buildings, trees, roads) | OpenStreetMap API v0.6, `map` call | Open Database Licence 1.0; attribution "© OpenStreetMap contributors". The licence URL is stated in every API response (`license="http://opendatacommons.org/licenses/odbl/1-0/"`) | 2026-10-23 |
 
 ## References
@@ -21,6 +23,8 @@ checked. Anything that could not be checked is marked `UNVERIFIED`.
 | glTF base colour factors are linear ("The factor value is a linear multiplier") | Khronos glTF 2.0 Specification, as above, section "Metallic-Roughness Material" | 2026-10-23 |
 | sRGB transfer function: C' = 12.92 C for C ≤ 0.0031308, else 1.055 C^(1/2.4) − 0.055 | International Color Consortium, "sRGB", `https://www.color.org/chardata/rgb/srgb.xalter` (the glTF specification's reference for sRGB is IEC 61966-2-1) | 2026-10-23 |
 | three.js is the most used WebGL library: npm downloads in the week 2026-10-12 to 2026-10-18 were three 14 115 096, @babylonjs/core 234 083, cesium 195 653, playcanvas 106 867 | npm download counts API, `https://api.npmjs.org/downloads/point/last-week/<package>` | 2026-10-23 |
+| Overture's file layout: 512 building files, 277 GB, 128 row groups per file, bounding-box statistics per row group; the collection lists one box per file in the order of its items | Our own reading of release 2026-10-21.0: the S3 listing, the STAC collection and items, and the Parquet footers (sources/overture.py) | 2026-10-23 |
+| Dataset names in Overture building sources ("OpenStreetMap", "Microsoft ML Buildings", "Google Open Buildings", "USGS Lidar", "doi:10.5281/zenodo.8174931"), and how many buildings have heights by region | Our own sample of seven files of release 2026-10-21.0, `benchmarks/overture_probe.py` → `results/overture_probe.json` | 2026-10-23 |
 | Highway classes for vehicles and for walking | OpenStreetMap wiki, "Key:highway", `https://wiki.openstreetmap.org/wiki/Key:highway` | UNVERIFIED (not yet read for this project) |
 
 ## Software
@@ -34,6 +38,7 @@ Licences from the PyPI metadata of each package.
 | pyproj | MIT | 2026-10-23 |
 | trimesh | MIT | 2026-10-23 |
 | mapbox-earcut | ISC | 2026-10-23 |
+| pyarrow | Apache-2.0 | 2026-10-23 |
 | pytest, ruff (development only) | MIT | 2026-10-23 |
 | hatchling (build only) | MIT | 2026-10-23 |
 

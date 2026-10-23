@@ -20,7 +20,7 @@ import shapely
 import trimesh
 from shapely.geometry import Polygon
 
-from .fill import NEIGHBOUR_MEDIAN
+from .heights import height_kind
 from .model import Building, Road, Site, Tree
 
 # Picture-only sizes for features the data do not size (see the module docstring).
@@ -34,8 +34,10 @@ DISPLAY_TRUNK_INTO_CROWN = 0.25  # how far the drawn trunk reaches into the crow
 #: Colours as seen on screen (sRGB, RGBA 0-255). glTF stores linear values; see srgb_to_linear.
 #: Buildings are coloured by what their height is based on, so the picture shows it.
 BUILDING_COLOURS = {
+    "measured": (196, 214, 190, 255),
     "mapped": (205, 202, 196, 255),
     "levels": (176, 186, 199, 255),
+    "ml": (198, 182, 216, 255),
     "estimated": (214, 178, 150, 255),
 }
 ROAD_COLOUR = (88, 88, 92, 255)
@@ -51,11 +53,8 @@ Z_UP_TO_Y_UP = np.array(
 
 
 def height_basis(b: Building) -> str:
-    if b.height_source == NEIGHBOUR_MEDIAN:
-        return "estimated"
-    if b.height_source == "osm:levels":
-        return "levels"
-    return "mapped"
+    """The building's kind of height (heights.HEIGHT_KINDS), which picks its colour."""
+    return height_kind(b.height_source, b.height_dataset) or "missing"
 
 
 def building_mesh(b: Building) -> trimesh.Trimesh | None:

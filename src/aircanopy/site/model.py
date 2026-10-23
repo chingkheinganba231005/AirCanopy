@@ -26,10 +26,12 @@ class Building:
     footprint: Polygon  # local metres; may have holes (courtyards)
     height: float | None  # top above the ground, m; None if the data do not say
     base: float  # bottom above the ground, m (0 for most buildings)
-    height_source: str  # "osm:height", "osm:building:height", "osm:levels" or "missing"
+    height_source: str  # "osm:height", "osm:levels", "overture:height", ... or "missing"
     base_source: str
     kind: str  # the building tag value, for example "yes", "residential", "school"
     part: bool = False  # True for a building:part (one piece of a more detailed building)
+    footprint_source: str = "osm"  # "osm", or "overture:<dataset>" for an Overture footprint
+    height_dataset: str | None = None  # for a height from Overture: the dataset that gave it
 
 
 @dataclass

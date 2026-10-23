@@ -1,0 +1,152 @@
+{
+  "what": "cost of reading Overture buildings for one site, and their contents by region",
+  "run_at": "2026-10-23T09:50:09Z",
+  "aircanopy": "0.1.0",
+  "release": "2026-10-21.0",
+  "read_cost_hku_500m": {
+    "bbox": [
+      114.13457411746967,
+      22.281742339726087,
+      114.13942588253033,
+      22.28625765964643
+    ],
+    "files_opened": 1,
+    "files": [
+      {
+        "file_bytes": 502038868,
+        "row_groups": 128,
+        "row_groups_read": 1,
+        "footer": {
+          "requests": 2,
+          "bytes": 742664
+        },
+        "total_requests": 4,
+        "total_bytes": 6550887,
+        "buildings_in_box": 212
+      }
+    ]
+  },
+  "sample_row_groups": [
+    {
+      "file": 40,
+      "file_bbox": [
+        -104.84400939941406,
+        30.251419067382812,
+        -97.33357238769531,
+        38.59672164916992
+      ],
+      "buildings": 15926,
+      "with_height": 14523,
+      "footprints_by_dataset": {
+        "OpenStreetMap": 14211,
+        "Microsoft ML Buildings": 1715
+      },
+      "heights_given_by_another_dataset": {
+        "USGS Lidar": 804,
+        "Microsoft ML Buildings": 704
+      }
+    },
+    {
+      "file": 120,
+      "file_bbox": [
+        -2.0526111125946045,
+        35.1646614074707,
+        1.5604244470596313,
+        40.70505905151367
+      ],
+      "buildings": 17488,
+      "with_height": 1,
+      "footprints_by_dataset": {
+        "Microsoft ML Buildings": 1406,
+        "Google Open Buildings": 16029,
+        "OpenStreetMap": 53
+      },
+      "heights_given_by_another_dataset": {}
+    },
+    {
+      "file": 200,
+      "file_bbox": [
+        1.5595194101333618,
+        44.756446838378906,
+        3.668668031692505,
+        48.70779800415039
+      ],
+      "buildings": 17804,
+      "with_height": 5943,
+      "footprints_by_dataset": {
+        "OpenStreetMap": 16684,
+        "Microsoft ML Buildings": 1120
+      },
+      "heights_given_by_another_dataset": {
+        "Microsoft ML Buildings": 5563
+      }
+    },
+    {
+      "file": 260,
+      "file_bbox": [
+        36.74992752075195,
+        -11.127038955688477,
+        38.007328033447266,
+        -1.2683525085449219
+      ],
+      "buildings": 38189,
+      "with_height": 0,
+      "footprints_by_dataset": {
+        "Google Open Buildings": 12773,
+        "Microsoft ML Buildings": 8085,
+        "OpenStreetMap": 17331
+      },
+      "heights_given_by_another_dataset": {}
+    },
+    {
+      "file": 330,
+      "file_bbox": [
+        112.93040466308594,
+        -33.89103698730469,
+        149.14503479003906,
+        -8.783949851989746
+      ],
+      "buildings": 19967,
+      "with_height": 13041,
+      "footprints_by_dataset": {
+        "Microsoft ML Buildings": 16300,
+        "OpenStreetMap": 3667
+      },
+      "heights_given_by_another_dataset": {
+        "Microsoft ML Buildings": 598
+      }
+    },
+    {
+      "file": 420,
+      "file_bbox": [
+        52.373924255371094,
+        30.818195343017578,
+        62.12760925292969,
+        39.78245544433594
+      ],
+      "buildings": 36521,
+      "with_height": 50,
+      "footprints_by_dataset": {
+        "Microsoft ML Buildings": 34086,
+        "OpenStreetMap": 2435
+      },
+      "heights_given_by_another_dataset": {}
+    },
+    {
+      "file": 470,
+      "file_bbox": [
+        111.2727279663086,
+        31.250179290771484,
+        114.02887725830078,
+        34.24361038208008
+      ],
+      "buildings": 41696,
+      "with_height": 0,
+      "footprints_by_dataset": {
+        "doi:10.5281/zenodo.8174931": 41668,
+        "OpenStreetMap": 28
+      },
+      "heights_given_by_another_dataset": {}
+    }
+  ]
+}

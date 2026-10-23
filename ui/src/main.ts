@@ -38,12 +38,14 @@ async function getJson<T>(url: string): Promise<T> {
 function layersOf(viewer: Viewer, summary: SummaryJson): Layer[] {
   const storey = summary.assumptions["A-001"].storey_height_m;
   const defs = [
+    { key: "buildings_measured", label: "Measured by lidar", groups: ["buildings_measured"] },
     { key: "buildings_mapped", label: "Height in the map data", groups: ["buildings_mapped"] },
     {
       key: "buildings_levels",
       label: `From storeys, ${storey} m each`,
       groups: ["buildings_levels"],
     },
+    { key: "buildings_ml", label: "Machine-learning estimate", groups: ["buildings_ml"] },
     {
       key: "buildings_estimated",
       label: "Estimated from neighbours",
@@ -159,7 +161,8 @@ async function start(): Promise<void> {
   viewer.requestRender();
 
   const attribution = byId("attribution");
-  attribution.replaceChildren("Map data ", ...attributionOf(summary));
+  const credits = attributionOf(summary).flatMap((el, i) => (i ? ["; ", el] : [el]));
+  attribution.replaceChildren("Map data: ", ...credits);
 
   window.aircanopy = {
     viewer,

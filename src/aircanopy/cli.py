@@ -47,6 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--out", type=Path, help="output folder (default: sites/NAME)")
     build.add_argument("--dx", type=float, default=2.0, help="voxel size in metres (default 2)")
     build.add_argument("--refresh", action="store_true", help="download again even if cached")
+    build.add_argument(
+        "--no-overture",
+        action="store_true",
+        help="use OpenStreetMap only, without Overture Maps buildings",
+    )
 
     view = sub.add_parser("view", help="open a site in the 3D viewer")
     view.add_argument("site_dir", type=Path, help="a site folder made by `aircanopy site build`")
@@ -105,9 +110,16 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("site build needs --bbox, --around or --osm-file")
         out = args.out or Path("sites") / args.name
         summary = build_site(
-            args.name, _box(args), out, dx=args.dx, refresh=args.refresh, osm_file=args.osm_file
+            args.name,
+            _box(args),
+            out,
+            dx=args.dx,
+            refresh=args.refresh,
+            osm_file=args.osm_file,
+            use_overture=not args.no_overture,
         )
-        print(json.dumps({k: v for k, v in summary.items() if k != "sources"}, indent=2))
+        shown = {k: v for k, v in summary.items() if k not in ("sources", "credits")}
+        print(json.dumps(shown, indent=2))
         print(f"wrote {out}/site.json, scene.glb, voxels.npz, summary.json")
     if args.command == "view":
         return _view(args)

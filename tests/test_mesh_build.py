@@ -150,7 +150,7 @@ def test_cli_parses_both_ways_of_giving_an_area():
 
 
 def test_cli_site_build_writes_the_folder(tmp_path, monkeypatch, capsys):
-    def fake_build_site(name, bbox, out, dx=2.0, refresh=False, osm_file=None):
+    def fake_build_site(name, bbox, out, dx=2.0, refresh=False, osm_file=None, use_overture=True):
         return build.build_from_osm_data(name, bbox, osm.parse(FIXTURE), out, dx, [])
 
     monkeypatch.setattr(build, "build_site", fake_build_site)

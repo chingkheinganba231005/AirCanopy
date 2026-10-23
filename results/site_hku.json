@@ -1,7 +1,7 @@
 {
-  "what": "site built from OpenStreetMap: a 500 m square around HKU",
+  "what": "site built from OpenStreetMap joined with Overture Maps: a 500 m square around HKU",
   "command": "aircanopy site build --around 114.1370,22.2840,500 --name hku",
-  "run_at": "2026-10-23T09:05:55Z",
+  "run_at": "2026-10-23T09:44:45Z",
   "name": "hku",
   "bbox": [
     114.13457411746967,
@@ -13,14 +13,26 @@
     500.0,
     500.0
   ],
-  "buildings": 199,
+  "buildings": 213,
   "building_heights": {
-    "estimated:neighbour-median": 32,
-    "missing": 13,
+    "estimated:neighbour-median": 41,
+    "missing": 18,
     "osm:levels": 154
   },
-  "buildings_without_height": 13,
-  "estimated_from_neighbours": 32,
+  "height_kinds": {
+    "measured": 0,
+    "mapped": 0,
+    "levels": 154,
+    "ml": 0,
+    "estimated": 41,
+    "missing": 18
+  },
+  "footprint_sources": {
+    "osm": 199,
+    "overture:doi:10.5281/zenodo.8174931": 14
+  },
+  "buildings_without_height": 18,
+  "estimated_from_neighbours": 41,
   "tallest_building_m": 114.0,
   "trees": 6,
   "trees_with_height": 0,
@@ -34,8 +46,43 @@
       251,
       251
     ],
-    "building_cells": 264199
+    "building_cells": 267527
   },
+  "assumptions": {
+    "A-001": {
+      "storey_height_m": 3.0
+    },
+    "A-002": {
+      "radius_m": 100.0,
+      "min_neighbours": 3
+    }
+  },
+  "overture": {
+    "release": "2026-10-21.0",
+    "buildings_read": 212,
+    "added": 14,
+    "heights_improved": 0,
+    "duplicates_left_out": 0,
+    "underground_left_out": 1,
+    "added_by_dataset": {
+      "doi:10.5281/zenodo.8174931": 14
+    },
+    "heights_by_dataset": {}
+  },
+  "credits": [
+    {
+      "dataset": "OpenStreetMap",
+      "credit": "© OpenStreetMap contributors",
+      "licence": "ODbL-1.0",
+      "buildings": 199
+    },
+    {
+      "dataset": "doi:10.5281/zenodo.8174931",
+      "credit": "Qian Shi et al., A First High-quality Vector Data of Buildings in East Asian Countries Based on a Comprehensive Large-scale Mapping Framework, Zenodo, 22 July 2023, doi:10.5281/zenodo.8174931",
+      "licence": "CC-BY-4.0",
+      "buildings": 14
+    }
+  ],
   "sources": [
     {
       "path": "map_114.134574_22.281742_114.139426_22.286258.osm",
@@ -45,6 +92,16 @@
       "sha256": "76962682001de831d42d9d8dc75a53f70befe109cb6fbd2c084f34af9d6577ad",
       "licence": "ODbL-1.0",
       "attribution": "(c) OpenStreetMap contributors"
+    },
+    {
+      "path": "buildings_2026-10-21.0_114.1345741_22.2817423_114.1394259_22.2862577.parquet",
+      "url": "https://stac.overturemaps.org/catalog.json#release=2026-10-21.0&theme=buildings&type=building&bbox=114.1345741,22.2817423,114.1394259,22.2862577",
+      "accessed": "2026-10-23T09:44:45Z",
+      "bytes": 59435,
+      "sha256": "1220b4c8f4c048f8fd106e6e7e001d969ff1bede22a6b7a6b90e436d9604181f",
+      "licence": "ODbL-1.0",
+      "attribution": "© OpenStreetMap contributors, Overture Maps Foundation",
+      "release": "2026-10-21.0"
     }
   ]
 }

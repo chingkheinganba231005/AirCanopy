@@ -15,6 +15,38 @@ import re
 #: Height of one storey when a height must be estimated from a storey count (assumption A-001).
 STOREY_HEIGHT_M = 3.0
 
+#: Label of a height estimated as the median of neighbouring buildings (site/fill.py, A-002).
+NEIGHBOUR_MEDIAN = "estimated:neighbour-median"
+
+#: Kinds of building height, from most to least trusted. A site keeps the most trusted height
+#: it has for each building, and the viewer colours buildings by kind:
+#: measured (lidar), mapped (a height given in map data), levels (storeys x STOREY_HEIGHT_M),
+#: ml (estimated by machine learning from images), estimated (median of neighbours).
+HEIGHT_KINDS = ("measured", "mapped", "levels", "ml", "estimated")
+
+#: How the datasets that Overture lists for heights obtained them (sources/overture.py).
+#: A dataset not listed here counts as "mapped".
+DATASET_HEIGHT_KIND = {
+    "USGS Lidar": "measured",
+    "Microsoft ML Buildings": "ml",
+    "Google Open Buildings": "ml",
+    "OpenStreetMap": "mapped",
+}
+
+
+def height_kind(source: str, dataset: str | None = None) -> str | None:
+    """The kind of a height (one of HEIGHT_KINDS), or None when there is no height."""
+    if source in ("osm:height", "osm:building:height"):
+        return "mapped"
+    if source in ("osm:levels", "overture:num_floors"):
+        return "levels"
+    if source == "overture:height":
+        return DATASET_HEIGHT_KIND.get(dataset or "", "mapped")
+    if source == NEIGHBOUR_MEDIAN:
+        return "estimated"
+    return None
+
+
 FOOT_M = 0.3048  # exact, by definition of the international foot
 
 _NUMBER = r"[-+]?\d+(?:\.\d+)?"

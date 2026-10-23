@@ -6,7 +6,7 @@ capabilities, https://api.openstreetmap.org/api/0.6/capabilities, `area maximum`
 2026-10-23). Larger areas need Overpass or another source. We ask once per area and cache the
 answer.
 
-The data are (c) OpenStreetMap contributors, available under the Open Database Licence 1.0.
+The data are © OpenStreetMap contributors, available under the Open Database Licence 1.0.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from .cache import Download, fetch
 
 API_MAP = "https://api.openstreetmap.org/api/0.6/map"
 LICENCE = "ODbL-1.0"
-ATTRIBUTION = "(c) OpenStreetMap contributors"
+ATTRIBUTION = "© OpenStreetMap contributors"
 #: The map call's limit on the box, in square degrees (the API's capabilities, see above).
 MAX_AREA_DEG2 = 0.25
 

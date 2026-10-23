@@ -16,9 +16,10 @@ from __future__ import annotations
 import numpy as np
 import shapely
 
+from .heights import NEIGHBOUR_MEDIAN
 from .model import Site
 
-NEIGHBOUR_MEDIAN = "estimated:neighbour-median"
+__all__ = ["MIN_NEIGHBOURS", "NEIGHBOUR_MEDIAN", "NEIGHBOUR_RADIUS_M", "fill_building_heights"]
 NEIGHBOUR_RADIUS_M = 100.0  # assumption A-002
 MIN_NEIGHBOURS = 3  # assumption A-002
 
