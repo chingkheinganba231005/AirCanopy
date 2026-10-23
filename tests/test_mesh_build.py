@@ -17,6 +17,7 @@ from aircanopy.site.mesh import (
     ROAD_COLOUR,
     building_mesh,
     export_glb,
+    road_mesh,
     scene,
     srgb_to_linear,
     tree_meshes,
@@ -224,3 +225,24 @@ def test_roads_are_drawn_only_inside_the_site():
     xmin, _, xmax, _ = site.extent()
     roads = scene(site).geometry["roads"]
     assert roads.bounds[0][0] == pytest.approx(xmin) and roads.bounds[1][0] == pytest.approx(xmax)
+
+
+def test_tunnels_are_not_drawn_and_bridges_span_valleys():
+    from aircanopy.site.terrain import Terrain
+
+    # A valley 20 m deep along x = 0, between banks at 50 m.
+    xs = np.arange(-100, 101, 10.0)
+    xx, _ = np.meshgrid(xs, xs)
+    ground = (50 - 20 * np.exp(-((xx / 30) ** 2))).astype(np.float32)
+    t = Terrain(-100, -100, 10, ground, np.full_like(ground, np.nan), "test", "terrain")
+    tunnel = road([(-90, 0), (90, 0)], "primary", width=8.0)
+    tunnel.tunnel = True
+    assert road_mesh(tunnel, t) is None
+    bridge = road([(-90, 0), (90, 0)], "primary", width=8.0)
+    bridge.bridge = True
+    deck = road_mesh(bridge, t)
+    middle = deck.vertices[np.abs(deck.vertices[:, 0]) < 5]
+    # Over the valley floor (30 m) the deck stays near the banks' height (50 m).
+    assert middle[:, 2].min() > 49
+    plain = road_mesh(road([(-90, 0), (90, 0)], "primary", width=8.0), t)
+    assert plain.vertices[np.abs(plain.vertices[:, 0]) < 5][:, 2].min() < 31

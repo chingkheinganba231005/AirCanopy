@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import shapely
 import trimesh
-from shapely.geometry import Polygon
+from shapely.geometry import LineString, Polygon
 
 from .heights import height_kind
 from .model import Building, Road, Site, Tree
@@ -71,14 +71,27 @@ def building_mesh(b: Building) -> trimesh.Trimesh | None:
     return mesh
 
 
-def _draped(poly: Polygon, terrain: Terrain, lift: float) -> trimesh.Trimesh | None:
+def _draped(
+    poly: Polygon, terrain: Terrain, lift: float, deck: LineString | None = None
+) -> trimesh.Trimesh | None:
     """A flat shape laid on the ground: its outline is sampled every quarter grid step, so the
-    triangles follow the slopes."""
+    triangles follow the slopes.
+
+    With `deck` (a bridge's centre line), the shape is a bridge deck instead: it runs in a
+    straight line from the ground at one end of the bridge to the ground at the other, as a
+    deck spans between its abutments, and never sinks below the ground on the way.
+    """
     if poly.is_empty or poly.area <= 0:
         return None
     dense = shapely.segmentize(poly, terrain.dx / 4)
     verts2, faces = trimesh.creation.triangulate_polygon(dense, engine="earcut")
-    z = terrain.at(verts2[:, 0], verts2[:, 1]) + lift
+    ground = terrain.at(verts2[:, 0], verts2[:, 1])
+    z = ground + lift
+    if deck is not None and deck.length > 0:
+        (x0, y0), (x1, y1) = deck.coords[0], deck.coords[-1]
+        z0, z1 = terrain.at([x0, x1], [y0, y1])
+        t = shapely.line_locate_point(deck, shapely.points(verts2), normalized=True)
+        z = np.maximum(z0 + t * (z1 - z0) + lift, z)
     return trimesh.Trimesh(np.column_stack([verts2, z]), faces, process=False)
 
 
@@ -89,18 +102,22 @@ def _parts(shape) -> list[Polygon]:
 def road_mesh(
     r: Road, terrain: Terrain, clip: Polygon | None = None, lift: float = DISPLAY_ROAD_LIFT_M
 ) -> trimesh.Trimesh | None:
-    """The road's surface on the ground, cut to `clip` (the site's square) if given.
+    """The road's surface, cut to `clip` (the site's square) if given.
 
     Roads are kept whole in the site model, and some run far beyond the site; drawn whole they
-    would stretch the picture far past the area that is simulated.
+    would stretch the picture far past the area that is simulated. Roads in tunnels are not
+    drawn: they are under the ground. Bridges are drawn as decks (see _draped).
     """
+    if r.tunnel:
+        return None
     width = r.width or (r.lanes * DISPLAY_LANE_WIDTH_M if r.lanes else 2 * DISPLAY_LANE_WIDTH_M)
     if r.highway in ("footway", "pedestrian", "path", "steps", "cycleway", "corridor"):
         width = r.width or DISPLAY_FOOTWAY_WIDTH_M
     shape = r.line.buffer(width / 2, cap_style="flat", join_style="round")
     if clip is not None:
         shape = shape.intersection(clip)
-    meshes = [m for p in _parts(shape) if (m := _draped(p, terrain, lift)) is not None]
+    deck = r.line if r.bridge else None
+    meshes = [m for p in _parts(shape) if (m := _draped(p, terrain, lift, deck)) is not None]
     return trimesh.util.concatenate(meshes) if meshes else None
 
 
