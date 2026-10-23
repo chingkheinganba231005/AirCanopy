@@ -12,6 +12,15 @@ Heights z are measured from the floor plane, half a cell below the centre of the
 of air. The air starts on that profile with random gusts added, which grow into turbulence.
 Time is counted in eddy turnovers, H / u*. After `spin_up` turnovers, the wind is sampled for
 `average` more and averaged over time and over each horizontal layer.
+
+Momentum in the box changes only by the push and the floor's friction, so the friction can
+differ from the push only while the column speeds up or slows down. The mean wind of the whole
+column is therefore recorded once per turnover during the spin-up and at every sample, to show
+whether the run has settled (JOURNAL.md, Step 11). Two measures of noise at the scale of the
+grid are recorded for each layer (Step 12): the share of the vertical wind's variance carried
+by waves shorter than 4 cells across, and the correlation of the vertical wind between
+neighbouring cells along x, which is near 1 for smooth turbulence and negative for noise that
+flips sign from one cell to the next.
 """
 
 from __future__ import annotations
@@ -33,6 +42,7 @@ def run(
     z0: float = 0.05,
     u_star: float = 0.005,
     smagorinsky: float = 0.1,
+    collision: str = "recursive",
     tau0: float = 0.500003,
     spin_up: float = 10.0,
     average: float = 10.0,
@@ -53,7 +63,7 @@ def run(
     drag = walls.rough_floor_drag(solid, z0)
     g = u_star**2 / h
     params = Params(tau0=tau0, smagorinsky=smagorinsky, g=(g, 0.0, 0.0), free_slip_top=True,
-                    slip_floors=True)  # fmt: skip
+                    slip_floors=True, collision=collision)  # fmt: skip
     s = Solver(lat, solid, params, backend, dtype, drag=drag)
     z = np.arange(h + 1) - 0.5  # height of each layer's centre above the floor plane
     z[0] = np.nan
@@ -64,7 +74,10 @@ def run(
     noise = [gusts * profile * rng.standard_normal(shape) for _ in range(3)]
     s.set_equilibrium(np.ones(shape), (profile + noise[0], noise[1], noise[2]))
     turnover = h / u_star  # steps
-    s.run(round(spin_up * turnover))
+    spin_steps, spin_up_column_u = round(spin_up * turnover), []
+    while s.time < spin_steps:
+        s.run(min(round(turnover), spin_steps - s.time))
+        spin_up_column_u.append(float(s.fields()[1][0][1:].mean()))
     every = max(1, round(turnover / samples_per_turnover))
     samples = round(average * samples_per_turnover)
     mean_u = np.zeros(h + 1)
@@ -73,6 +86,12 @@ def run(
     mean_ww = np.zeros(h + 1)
     floor_stress = 0.0
     lam = 2 * walls.drag_coefficient(z0)
+    column_u = [spin_up_column_u[-1]] if spin_up_column_u else []
+    # Noise at the scale of the grid in the vertical wind, layer by layer (module docstring).
+    kx, ky = (np.abs(np.fft.fftfreq(m) * m) for m in (nx, ny))
+    short = (kx[None, :] > nx / 4) | (ky[:, None] > ny / 4)
+    w_short, w_all, w_lag, w_sq = (np.zeros(h) for _ in range(4))
+    floor_push, floor_u = 0.0, 0.0
     for _ in range(samples):
         s.run(every)
         rho, (ux, uy, uz) = s.fields()
@@ -84,6 +103,15 @@ def run(
         mean_ww += (uz * uz).mean(axis=(1, 2))
         speed1 = np.sqrt(ux[1] ** 2 + uy[1] ** 2 + uz[1] ** 2)
         floor_stress += float((0.5 * lam * rho[1] * speed1 * ux[1]).mean())
+        floor_push += float((speed1 * ux[1]).mean())
+        floor_u += float(ux[1].mean())
+        column_u.append(float(ux[1:].mean()))
+        w = uz[1:]
+        spectrum = np.abs(np.fft.fft2(w)) ** 2
+        w_short += (spectrum * short).sum(axis=(1, 2))
+        w_all += spectrum.sum(axis=(1, 2))
+        w_lag += (w * np.roll(w, 1, axis=2)).sum(axis=(1, 2))
+        w_sq += (w * w).sum(axis=(1, 2))
     mean_u, mean_uw = mean_u / samples, mean_uw / samples
     mean_uu, mean_ww = mean_uu / samples, mean_ww / samples
     floor_stress /= samples
@@ -98,6 +126,7 @@ def run(
         "u_star": u_star,
         "g": g,
         "smagorinsky": smagorinsky,
+        "collision": collision,
         "tau0": tau0,
         "lattice": lat.name,
         "steps": s.time,
@@ -115,4 +144,12 @@ def run(
         "max_speed": float(np.max(mean_u[1:])),
         "drag_lambda": lam,
         "mach_of_fastest_mean": float(np.max(mean_u[1:]) / math.sqrt(1 / 3)),
+        # The column's mean wind over u*, once per turnover of the spin-up, then at each sample.
+        "spin_up_column_u": [v / u_star for v in spin_up_column_u],
+        "column_u": [v / u_star for v in column_u],
+        # In the first layer, mean(|U| u) / mean(u)^2: how much the gusts raise the friction
+        # above what the mean wind alone would give.
+        "floor_gust_factor": (floor_push / samples) / (floor_u / samples) ** 2,
+        "w_grid_scale_share": [float(v) for v in w_short / w_all],
+        "w_neighbour_correlation_x": [float(v) for v in w_lag / w_sq],
     }

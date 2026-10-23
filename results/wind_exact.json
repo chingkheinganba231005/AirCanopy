@@ -1,6 +1,6 @@
 {
   "what": "errors against exact solutions, and observed orders of convergence",
-  "run_at": "2026-10-23T13:24:17Z",
+  "run_at": "2026-10-23T18:38:17Z",
   "aircanopy": "0.1.0",
   "jax": "0.11.2",
   "precision": "float64",
@@ -458,6 +458,232 @@
         ]
       }
     },
+    "D3Q27_recursive": {
+      "shear_wave": {
+        "sizes": [
+          16,
+          32,
+          64
+        ],
+        "relative_errors": [
+          0.002071935388698737,
+          0.0005149018534920946,
+          0.00012856416584314245
+        ],
+        "observed_orders": [
+          2.009,
+          2.002
+        ],
+        "criteria": {
+          "error_below_0.01_at_32": true,
+          "orders_at_least_1.8": true
+        },
+        "runs": [
+          {
+            "n": 16,
+            "tau": 0.8,
+            "nu": 0.1,
+            "nu_measured": 0.10020719353886988,
+            "relative_error": 0.002071935388698737
+          },
+          {
+            "n": 32,
+            "tau": 0.8,
+            "nu": 0.1,
+            "nu_measured": 0.10005149018534922,
+            "relative_error": 0.0005149018534920946
+          },
+          {
+            "n": 64,
+            "tau": 0.8,
+            "nu": 0.1,
+            "nu_measured": 0.10001285641658432,
+            "relative_error": 0.00012856416584314245
+          }
+        ]
+      },
+      "poiseuille": {
+        "sizes": [
+          8,
+          16,
+          32
+        ],
+        "relative_errors": [
+          0.004278625498427674,
+          0.0010697634787664421,
+          0.0002674425442885172
+        ],
+        "observed_orders": [
+          2.0,
+          2.0
+        ],
+        "criteria": {
+          "error_below_0.01_at_16": true,
+          "orders_at_least_1.8": true
+        },
+        "runs": [
+          {
+            "h": 8,
+            "tau": 0.8,
+            "steps": 3000,
+            "relative_error": 0.004278625498427674,
+            "max_error_over_u_max": 0.0031250000000214266
+          },
+          {
+            "h": 16,
+            "tau": 0.8,
+            "steps": 7000,
+            "relative_error": 0.0010697634787664421,
+            "max_error_over_u_max": 0.0007812500000934156
+          },
+          {
+            "h": 32,
+            "tau": 0.8,
+            "steps": 21000,
+            "relative_error": 0.0002674425442885172,
+            "max_error_over_u_max": 0.00019531250096578578
+          }
+        ]
+      },
+      "taylor_green": {
+        "sizes": [
+          16,
+          32,
+          64
+        ],
+        "relative_errors": [
+          0.0034416645960366333,
+          0.00038204504130663055,
+          0.00021264479643629545
+        ],
+        "observed_orders": [
+          3.171,
+          0.845
+        ],
+        "criteria": {
+          "error_below_0.01_at_32": true,
+          "orders_at_least_1.8": false
+        },
+        "runs": [
+          {
+            "n": 16,
+            "tau": 0.8,
+            "u0": 0.04,
+            "steps": 22,
+            "settling_steps": 133,
+            "relative_error": 0.0034416645960366333
+          },
+          {
+            "n": 32,
+            "tau": 0.8,
+            "u0": 0.02,
+            "steps": 90,
+            "settling_steps": 446,
+            "relative_error": 0.00038204504130663055
+          },
+          {
+            "n": 64,
+            "tau": 0.8,
+            "u0": 0.01,
+            "steps": 360,
+            "settling_steps": 1371,
+            "relative_error": 0.00021264479643629545
+          }
+        ]
+      },
+      "taylor_green_speed_divided_by_4": {
+        "sizes": [
+          16,
+          32,
+          64
+        ],
+        "relative_errors": [
+          0.0016189181448236403,
+          0.00029759945060397986,
+          8.429240069609134e-05
+        ],
+        "observed_orders": [
+          2.444,
+          1.82
+        ],
+        "criteria": {
+          "error_below_0.01_at_32": true,
+          "orders_at_least_1.8": true
+        },
+        "runs": [
+          {
+            "n": 16,
+            "tau": 0.8,
+            "u0": 0.01,
+            "steps": 22,
+            "settling_steps": 83,
+            "relative_error": 0.0016189181448236403
+          },
+          {
+            "n": 32,
+            "tau": 0.8,
+            "u0": 0.005,
+            "steps": 90,
+            "settling_steps": 238,
+            "relative_error": 0.00029759945060397986
+          },
+          {
+            "n": 64,
+            "tau": 0.8,
+            "u0": 0.0025,
+            "steps": 360,
+            "settling_steps": 554,
+            "relative_error": 8.429240069609134e-05
+          }
+        ]
+      },
+      "taylor_green_speed_divided_by_16": {
+        "sizes": [
+          16,
+          32,
+          64
+        ],
+        "relative_errors": [
+          0.001439946820517045,
+          0.0002915002602975293,
+          6.94543318420098e-05
+        ],
+        "observed_orders": [
+          2.304,
+          2.069
+        ],
+        "criteria": {
+          "error_below_0.01_at_32": true,
+          "orders_at_least_1.8": true
+        },
+        "runs": [
+          {
+            "n": 16,
+            "tau": 0.8,
+            "u0": 0.0025,
+            "steps": 22,
+            "settling_steps": 48,
+            "relative_error": 0.001439946820517045
+          },
+          {
+            "n": 32,
+            "tau": 0.8,
+            "u0": 0.00125,
+            "steps": 90,
+            "settling_steps": 118,
+            "relative_error": 0.0002915002602975293
+          },
+          {
+            "n": 64,
+            "tau": 0.8,
+            "u0": 0.000625,
+            "steps": 360,
+            "settling_steps": 218,
+            "relative_error": 6.94543318420098e-05
+          }
+        ]
+      }
+    },
     "D3Q27_regularised": {
       "shear_wave": {
         "sizes": [
@@ -911,5 +1137,5 @@
       }
     }
   },
-  "seconds": 92
+  "seconds": 94
 }

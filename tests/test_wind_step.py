@@ -12,6 +12,11 @@ jax.config.update("jax_enable_x64", True)
 
 LATS = [D3Q19, D3Q27]
 ids = lambda lat: lat.name  # noqa: E731
+#: Every collision on every lattice that allows it; the first of each lattice is its default.
+PAIRS = [(D3Q19, "regularised"), (D3Q19, "bgk"), (D3Q27, "recursive"), (D3Q27, "regularised"),
+         (D3Q27, "bgk")]  # fmt: skip
+DEFAULTS = [(D3Q19, "regularised"), (D3Q27, "recursive")]
+pair_ids = lambda pair: f"{pair[0].name}-{pair[1]}" if isinstance(pair, tuple) else str(pair)  # noqa: E731
 
 
 def perturbed(shape, seed=0, du=0.02):
@@ -36,11 +41,10 @@ def test_equilibrium_has_the_moments_of_a_gas(lat):
             assert np.allclose(flux, expected, atol=1e-14)
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
-@pytest.mark.parametrize("regularised", [True, False])
-def test_uniform_flow_stays_uniform(lat, regularised):
+@pytest.mark.parametrize(("lat", "collision"), PAIRS, ids=pair_ids)
+def test_uniform_flow_stays_uniform(lat, collision):
     shape = (4, 5, 6)
-    s = Solver(lat, np.zeros(shape, bool), Params(tau0=0.6, regularised=regularised), "numpy",
+    s = Solver(lat, np.zeros(shape, bool), Params(tau0=0.6, collision=collision), "numpy",
                np.float64)  # fmt: skip
     s.set_equilibrium(
         np.ones(shape), (np.full(shape, 0.05), np.full(shape, -0.02), 0 * np.ones(shape))
@@ -51,12 +55,12 @@ def test_uniform_flow_stays_uniform(lat, regularised):
     assert np.allclose(uy, -0.02, atol=1e-13) and np.allclose(uz, 0.0, atol=1e-13)
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
+@pytest.mark.parametrize(("lat", "collision"), PAIRS, ids=pair_ids)
 @pytest.mark.parametrize("smagorinsky", [0.0, 0.17])
-def test_mass_and_momentum_are_conserved_in_a_periodic_box(lat, smagorinsky):
+def test_mass_and_momentum_are_conserved_in_a_periodic_box(lat, collision, smagorinsky):
     shape = (6, 7, 8)
-    s = Solver(lat, np.zeros(shape, bool), Params(tau0=0.52, smagorinsky=smagorinsky),
-               "numpy", np.float64)  # fmt: skip
+    params = Params(tau0=0.52, smagorinsky=smagorinsky, collision=collision)
+    s = Solver(lat, np.zeros(shape, bool), params, "numpy", np.float64)
     rho0, u0 = perturbed(shape, seed=2)
     s.set_equilibrium(rho0, u0)
     mass0 = rho0.sum()
@@ -68,12 +72,11 @@ def test_mass_and_momentum_are_conserved_in_a_periodic_box(lat, smagorinsky):
         assert (rho * u[a]).sum() == pytest.approx(momentum0[a], abs=1e-12)
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
-@pytest.mark.parametrize("regularised", [True, False])
-def test_a_body_force_accelerates_uniform_air_at_exactly_g(lat, regularised):
+@pytest.mark.parametrize(("lat", "collision"), PAIRS, ids=pair_ids)
+def test_a_body_force_accelerates_uniform_air_at_exactly_g(lat, collision):
     shape = (3, 3, 3)
     g = (1e-5, -2e-5, 3e-6)
-    s = Solver(lat, np.zeros(shape, bool), Params(tau0=0.7, g=g, regularised=regularised),
+    s = Solver(lat, np.zeros(shape, bool), Params(tau0=0.7, g=g, collision=collision),
                "numpy", np.float64)  # fmt: skip
     s.set_equilibrium(
         np.ones(shape), (np.full(shape, 0.01), 0 * np.ones(shape), 0 * np.ones(shape))
@@ -84,13 +87,14 @@ def test_a_body_force_accelerates_uniform_air_at_exactly_g(lat, regularised):
     assert np.allclose(u[1], 50 * g[1], atol=1e-15) and np.allclose(u[2], 50 * g[2], atol=1e-15)
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
-def test_walls_keep_the_air_in(lat):
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_walls_keep_the_air_in(lat, collision):
     shape = (8, 7, 9)
     solid = np.ones(shape, bool)
     solid[1:-1, 1:-1, 1:-1] = False
     solid[3:5, 2:4, 4] = True  # an obstacle in the middle
-    s = Solver(lat, solid, Params(tau0=0.55, smagorinsky=0.1), "numpy", np.float64)
+    params = Params(tau0=0.55, smagorinsky=0.1, collision=collision)
+    s = Solver(lat, solid, params, "numpy", np.float64)
     rho0, u0 = perturbed(shape, seed=3)
     s.set_equilibrium(rho0, u0)
     fluid = ~solid
@@ -100,9 +104,8 @@ def test_walls_keep_the_air_in(lat):
     assert rho[fluid].sum() == pytest.approx(mass0, rel=1e-13)
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
-@pytest.mark.parametrize("regularised", [True, False])
-def test_free_slip_top_is_a_mirror_plane(lat, regularised):
+@pytest.mark.parametrize(("lat", "collision"), PAIRS, ids=pair_ids)
+def test_free_slip_top_is_a_mirror_plane(lat, collision):
     """A channel with walls at the bottom and the top is symmetric about its middle, so a
     half channel with a free-slip lid in the middle must reproduce its lower half exactly."""
     h, ny, nx = 5, 3, 4
@@ -111,7 +114,7 @@ def test_free_slip_top_is_a_mirror_plane(lat, regularised):
     half = np.zeros((h + 1, ny, nx), bool)
     half[0] = True
     g = (2e-5, 0.0, 0.0)
-    params = dict(tau0=0.6, smagorinsky=0.1, g=g, regularised=regularised)
+    params = dict(tau0=0.6, smagorinsky=0.1, g=g, collision=collision)
     a = Solver(lat, full, Params(**params), "numpy", np.float64)
     b = Solver(lat, half, Params(**params, free_slip_top=True), "numpy", np.float64)
     rng = np.random.default_rng(4)
@@ -154,13 +157,14 @@ def test_smagorinsky_relaxation_time_solves_its_defining_equation():
     assert np.allclose(lbm.smagorinsky_tau(np, p, rho, tau0, 0.0), tau0)
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
-def test_numpy_and_jax_agree(lat):
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_numpy_and_jax_agree(lat, collision):
     shape = (6, 5, 7)
     solid = np.zeros(shape, bool)
     solid[0] = True
     solid[1:3, 2, 3] = True
-    params = Params(tau0=0.51, smagorinsky=0.15, g=(1e-5, 0.0, -1e-6), free_slip_top=True)
+    params = Params(tau0=0.51, smagorinsky=0.15, g=(1e-5, 0.0, -1e-6), free_slip_top=True,
+                    collision=collision)  # fmt: skip
     rho0, u0 = perturbed(shape, seed=6)
     out = []
     for backend in ("numpy", "jax"):
@@ -171,10 +175,9 @@ def test_numpy_and_jax_agree(lat):
     assert np.abs(out[0] - out[1]).max() < 1e-13
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
-@pytest.mark.parametrize("regularised", [True, False])
+@pytest.mark.parametrize(("lat", "collision"), PAIRS, ids=pair_ids)
 @pytest.mark.parametrize("forced", [True, False])
-def test_the_collision_through_moments_is_the_same_collision(lat, regularised, forced):
+def test_the_collision_through_moments_is_the_same_collision(lat, collision, forced):
     shape = (4, 5, 6)
     solid = np.zeros(shape, bool)
     solid[0, 1:3, 2] = True
@@ -182,18 +185,69 @@ def test_the_collision_through_moments_is_the_same_collision(lat, regularised, f
     f = lbm.equilibrium(np, lat, *perturbed(shape, seed=8))
     f = f * (1.0 + 0.01 * rng.standard_normal(f.shape))  # some non-equilibrium content
     cfg = {"solid": solid, "fluid": ~solid, "tau0": 0.52, "cs": 0.17, "g": (1e-5, -2e-6, 3e-6)}
-    direct = lbm.collide(np, lat, f, cfg, regularised, forced)
-    moments = lbm.collide_moments(np, lat, f, cfg, regularised, forced)
-    assert np.abs(direct - moments).max() < 1e-15
+    direct = lbm.collide(np, lat, f, cfg, collision, forced)
+    moments = lbm.collide_moments(np, lat, f, cfg, collision, forced)
+    # The recursive collision is built two different ways (Hermite coefficients, product form).
+    assert np.abs(direct - moments).max() < (1e-14 if collision == "recursive" else 1e-15)
 
 
-def test_a_float32_run_stays_float32_with_64_bit_enabled():
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_a_float32_run_stays_float32_with_64_bit_enabled(lat, collision):
     # NumPy's float64 scalars are not "weakly typed" in JAX: one of them in the step would
     # silently turn a float32 run into a float64 run (it did: the lattice weights).
     solid = np.zeros((4, 4, 4), bool)
     solid[0] = True
-    s = Solver(D3Q19, solid, Params(tau0=0.6, smagorinsky=0.1, g=(1e-6, 0, 0)), "jax", np.float32)
+    params = Params(tau0=0.6, smagorinsky=0.1, g=(1e-6, 0, 0), collision=collision)
+    s = Solver(lat, solid, params, "jax", np.float32)
     s.set_flow(*perturbed((4, 4, 4), seed=9))
     assert s.f.dtype == np.float32
     s.run(3)
     assert s.f.dtype == np.float32
+
+
+def test_the_extended_equilibrium_has_the_right_third_moments():
+    """Its point: sum f c_a c_a c_b = rho (c_s^2 u_b + u_a^2 u_b), as for a real gas, where the
+    second-order equilibrium misses the u_a^2 u_b part (lbm module docstring)."""
+    rho, u = perturbed((3, 4, 5), seed=10, du=0.05)
+    c = D3Q27.c.astype(float)
+    eq = lbm.product_terms(np, D3Q27, rho, u)[0]
+    second = lbm.equilibrium(np, D3Q27, rho, u)
+    for f, exact in ((eq, True), (second, False)):
+        assert np.allclose(f.sum(axis=0), rho, atol=1e-14)
+        for a in range(3):
+            assert np.allclose(np.einsum("i,i...->...", c[:, a], f), rho * u[a], atol=1e-14)
+        for a, b in [(0, 1), (1, 2), (2, 0), (0, 2)]:
+            m = np.einsum("i,i...->...", c[:, a] ** 2 * c[:, b], f)
+            gas = rho * (CS2 * u[b] + u[a] ** 2 * u[b])
+            assert np.allclose(m, gas, atol=1e-14) == exact
+
+
+def test_the_recursive_collision_needs_d3q27():
+    with pytest.raises(ValueError, match="D3Q27"):
+        Solver(D3Q19, np.zeros((3, 3, 3), bool), Params(tau0=0.6), "numpy")
+    with pytest.raises(ValueError, match="unknown collision"):
+        Solver(D3Q27, np.zeros((3, 3, 3), bool), Params(tau0=0.6, collision="cumulant"), "numpy")
+
+
+@pytest.mark.parametrize(("collision", "stable"), [("recursive", True), ("regularised", False)])
+def test_noise_in_a_fast_wind_with_almost_no_viscosity(collision, stable):
+    """Step 12: in a uniform wind at Mach 0.17 with almost no viscosity, tiny noise dies away
+    with the recursive collision and grows without bound with the regularised one."""
+    shape = (8, 8, 16)
+    s = Solver(D3Q27, np.zeros(shape, bool), Params(tau0=0.500003, collision=collision), "jax",
+               np.float64)  # fmt: skip
+    rng = np.random.default_rng(11)
+    noise = [1e-4 * rng.standard_normal(shape) for _ in range(3)]
+    s.set_equilibrium(np.ones(shape), (0.1 + noise[0], noise[1], noise[2]))
+
+    def energy():
+        _, u = s.fields()
+        return sum(float(((c - c.mean()) ** 2).mean()) for c in u)
+
+    start = energy()
+    s.run(2000)
+    end = energy()
+    if stable:
+        assert np.isfinite(end) and end < start
+    else:
+        assert not np.isfinite(end) or end > 100 * start

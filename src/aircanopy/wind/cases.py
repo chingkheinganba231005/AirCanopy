@@ -36,7 +36,7 @@ def shear_wave(
     n: int,
     tau: float = 0.8,
     u0: float = 0.01,
-    regularised: bool = True,
+    collision: str = "recursive",
     backend: str = "jax",
 ) -> dict:
     """Decay of a shear wave one box long (n cells): measured against expected viscosity.
@@ -49,7 +49,7 @@ def shear_wave(
     t_decay = 1.0 / (nu * k * k)
     t1, t2 = round(0.1 * t_decay), round(t_decay)
     z = np.arange(n, dtype=float).reshape(n, 1, 1)
-    s = Solver(lat, np.zeros((n, 1, 1), bool), Params(tau0=tau, regularised=regularised),
+    s = Solver(lat, np.zeros((n, 1, 1), bool), Params(tau0=tau, collision=collision),
                backend, np.float64)  # fmt: skip
     zero = np.zeros((n, 1, 1))
     s.set_equilibrium(np.ones((n, 1, 1)), (u0 * np.sin(k * z), zero, zero))
@@ -77,7 +77,7 @@ def poiseuille(
     h: int,
     tau: float = 0.8,
     u_max: float = 0.01,
-    regularised: bool = True,
+    collision: str = "recursive",
     backend: str = "jax",
     tolerance: float = 1e-12,
     max_steps: int = 2_000_000,
@@ -95,7 +95,7 @@ def poiseuille(
     exact = g / (2 * nu) * (z - 0.5) * (h + 0.5 - z)
     exact[0] = exact[-1] = 0.0
     shape = solid.shape
-    s = Solver(lat, solid, Params(tau0=tau, g=(g, 0.0, 0.0), regularised=regularised),
+    s = Solver(lat, solid, Params(tau0=tau, g=(g, 0.0, 0.0), collision=collision),
                backend, np.float64)  # fmt: skip
     zero = np.zeros(shape)
     s.set_equilibrium(np.ones(shape), (exact.reshape(shape), zero, zero))
@@ -124,7 +124,7 @@ def taylor_green(
     n: int,
     tau: float = 0.8,
     u0: float = 0.04,
-    regularised: bool = True,
+    collision: str = "recursive",
     backend: str = "jax",
     settle: bool = True,
 ) -> dict:
@@ -146,7 +146,7 @@ def taylor_green(
         p = 0.25 * u0**2 * (np.cos(2 * k * x) + np.cos(2 * k * y)) * decay**2
         return 1.0 + p / CS2, ux, uy
 
-    s = Solver(lat, np.zeros(shape, bool), Params(tau0=tau, regularised=regularised),
+    s = Solver(lat, np.zeros(shape, bool), Params(tau0=tau, collision=collision),
                backend, np.float64)  # fmt: skip
     rho0, ux0, uy0 = exact(0.0)
     u_start = (ux0.reshape(shape), uy0.reshape(shape), np.zeros(shape))
@@ -172,6 +172,7 @@ def taylor_green_3d(
     reynolds: float = 1600.0,
     mach: float = 0.1,
     smagorinsky: float = 0.0,
+    collision: str = "recursive",
     t_end: float = 20.0,
     samples_per_tc: int = 10,
     backend: str = "jax",
@@ -196,7 +197,7 @@ def taylor_green_3d(
     u = v0 * np.sin(x) * np.cos(y) * np.cos(z)
     v = -v0 * np.cos(x) * np.sin(y) * np.cos(z)
     p = v0**2 / 16 * (np.cos(2 * x) + np.cos(2 * y)) * (np.cos(2 * z) + 2)
-    params = Params(tau0=tau, smagorinsky=smagorinsky)
+    params = Params(tau0=tau, smagorinsky=smagorinsky, collision=collision)
     s = Solver(lat, np.zeros((n, n, n), bool), params, backend, dtype)
     s.set_flow(1.0 + p / CS2, (u, v, np.zeros_like(u)))
     every = max(1, round(tc / samples_per_tc))
@@ -212,6 +213,7 @@ def taylor_green_3d(
         "reynolds": reynolds,
         "mach": mach,
         "smagorinsky": smagorinsky,
+        "collision": collision,
         "tau": tau,
         "steps_per_time_unit": tc,
         "times": [k / tc for k in steps],

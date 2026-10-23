@@ -22,15 +22,25 @@ moving in direction c_i. One step:
    force. This is the exact solution of nu = nu0 + Cs^2 |S| when the strain rate is read from
    the packets themselves, S = -P / (2 rho c_s^2 tau), so no finite differences are needed
    (Hou et al. 1994).
-4. *Collision*, regularised (Latt and Chopard 2006): the packets are rebuilt from the
-   equilibrium and the trace-free part P_d of P alone,
-       f_post_i = f_eq_i + (1 - 1/tau) w_i (9/2) c_i c_i : P_d + S_i / 2,
-   with S_i the Guo forcing term. Shear stresses relax as in the plain BGK collision. The
-   higher moments, which BGK lets ring when tau is close to 1/2, and the bulk stress, which
-   carries sound, relax fully every step (Dellar 2001). This was meant to keep the scheme
-   stable at the tiny viscosity of air on a city-sized grid. It does not when the wind is
-   fast: in a uniform wind at Mach 0.13 with almost no viscosity, noise one cell long grows
-   until the run fails (JOURNAL.md, Step 12).
+4. *Collision*, one of three (COLLISIONS):
+   - "recursive" (the default; D3Q27 only): recursive regularisation with the extended
+     equilibrium (Malaspinas 2015; Coreixas et al. 2017, 2019). On D3Q27 the equilibrium is a
+     product of one factor per axis, f_eq_i = rho phi(c_ix, ux) phi(c_iy, uy) phi(c_iz, uz),
+     with phi(0, u) = 2/3 - u^2 and phi(+-1, u) = (1/3 +- u + u^2) / 2; it has the right
+     moments up to third order, where the usual second-order equilibrium does not. The
+     non-equilibrium part is rebuilt from P alone, at every order the lattice holds, with the
+     recursive formulas of Coreixas et al. (2019, Eq. 89). In product form this is
+         f_neq_i = sum_a P_aa (phi''_a / 2) phi_b phi_c + sum_{a<b} P_ab phi'_a phi'_b phi_c,
+     with ' = d/du, and f_post = f_eq + (1 - 1/tau) f_neq + F . d f_eq / d(rho u) / 2.
+     In a uniform wind at Mach 0.17 with almost no viscosity, noise dies away (JOURNAL.md,
+     Step 12).
+   - "regularised" (Latt and Chopard 2006): the second-order equilibrium, and the packets
+     rebuilt from it and the trace-free part P_d of P alone,
+         f_post_i = f_eq_i + (1 - 1/tau) w_i (9/2) c_i c_i : P_d + S_i / 2,
+     with S_i the Guo forcing term; the bulk stress, which carries sound, relaxes fully every
+     step (Dellar 2001). Step 12 found it unstable in a fast wind at almost no viscosity:
+     noise one cell long grows until the run fails. Kept for comparison, and for D3Q19.
+   - "bgk": plain BGK with the second-order equilibrium, for comparison.
 
 Solid cells keep the values streamed into them; no fluid cell ever reads them.
 """
@@ -38,6 +48,7 @@ Solid cells keep the values streamed into them; no fluid cell ever reads them.
 from __future__ import annotations
 
 import functools
+import itertools
 import math
 
 import numpy as np
@@ -162,6 +173,82 @@ def guo_source(xp, lat: VelocitySet, pre, u, force):
     return xp.stack(out)
 
 
+COLLISIONS = ("recursive", "regularised", "bgk")
+
+
+def check_collision(lat: VelocitySet, collision: str) -> None:
+    if collision not in COLLISIONS:
+        raise ValueError(f"unknown collision {collision!r}; choose one of {COLLISIONS}")
+    if collision == "recursive" and lat.name != "D3Q27":
+        raise ValueError("the recursive collision needs D3Q27, whose equilibrium is a product "
+                         "of one factor per axis")  # fmt: skip
+
+
+def _axis_factors(u):
+    """phi(c, u), phi'(c, u) and phi''(c, u) / 2 for c = -1, 0, 1 (module docstring)."""
+    usq = u * u
+    phi = {0: 2.0 / 3.0 - usq, 1: 0.5 * (1.0 / 3.0 + u + usq), -1: 0.5 * (1.0 / 3.0 - u + usq)}
+    d1 = {0: -2.0 * u, 1: 0.5 + u, -1: u - 0.5}
+    half_d2 = {0: -1.0, 1: 0.5, -1: 0.5}
+    return phi, d1, half_d2
+
+
+def product_terms(xp, lat: VelocitySet, rho, u, p=None, force=None):
+    """The extended equilibrium rho phi_x phi_y phi_z, and, if given, the non-equilibrium part
+    rebuilt from the flux p (PAIRS order) and the force term F . grad_u(phi_x phi_y phi_z), each
+    of shape (Q, ...). D3Q27 only; None for the parts not asked for."""
+    fx, fy, fz = (_axis_factors(u[a]) for a in range(3))
+    eq, neq, src = [], [], []
+    for cx, cy, cz in ((int(a), int(b), int(c)) for a, b, c in lat.c):
+        px, py, pz = fx[0][cx], fy[0][cy], fz[0][cz]
+        yz = py * pz
+        eq.append(rho * px * yz)
+        if p is not None:
+            dx, dy, dz = fx[1][cx], fy[1][cy], fz[1][cz]
+            hx, hy, hz = fx[2][cx], fy[2][cy], fz[2][cz]
+            diagonal = hx * p[0] * yz + hy * p[1] * px * pz + hz * p[2] * px * py
+            neq.append(diagonal + p[3] * dx * dy * pz + p[4] * dx * py * dz + p[5] * px * dy * dz)
+        if force is not None:
+            dx, dy, dz = fx[1][cx], fy[1][cy], fz[1][cz]
+            src.append(force[0] * dx * yz + force[1] * px * dy * pz + force[2] * px * py * dz)
+    return (xp.stack(eq), xp.stack(neq) if p is not None else None,
+            xp.stack(src) if force is not None else None)  # fmt: skip
+
+
+@functools.cache
+def hermite_basis(lat: VelocitySet) -> tuple[tuple[tuple[int, int, int], ...], np.ndarray]:
+    """The 27 tensor-product Hermite polynomials of D3Q27, H_pqr = H_p(cx) H_q(cy) H_r(cz) with
+    H_0 = 1, H_1 = c, H_2 = c^2 - c_s^2, and the matrix (Q, 27) that builds packets from
+    Hermite coefficients a_pqr: f_i = w_i sum a_pqr H_pqr(c_i) / (N_p N_q N_r), N = 1, c_s^2,
+    2 c_s^4. Used by the reference form of the recursive collision (`collide`)."""
+    check_collision(lat, "recursive")
+    orders = tuple(itertools.product(range(3), repeat=3))
+    norm = (1.0, CS2, 2.0 * CS2 * CS2)
+    c = lat.c.astype(float)
+
+    def h1(n, v):
+        return (1.0, v, v * v - CS2)[n]
+
+    build = np.array([[lat.w[i] * np.prod([h1(o[k], c[i, k]) / norm[o[k]] for k in range(3)])
+                       for o in orders] for i in range(lat.q)])  # fmt: skip
+    return orders, build
+
+
+def _recursive_coefficient(order, u, p):
+    """a(1)_pqr from the second-order a(1) = p: the sum, over each pair of the order's indices,
+    of p for that pair times u for each remaining index (Coreixas et al. 2019, Eq. 89)."""
+    index = {(0, 0): 0, (1, 1): 1, (2, 2): 2, (0, 1): 3, (0, 2): 4, (1, 2): 5}
+    axes = [0] * order[0] + [1] * order[1] + [2] * order[2]
+    total = None
+    for i, j in itertools.combinations(range(len(axes)), 2):
+        term = p[index[tuple(sorted((axes[i], axes[j])))]]
+        for k, a in enumerate(axes):
+            if k not in (i, j):
+                term = term * u[a]
+        total = term if total is None else total + term
+    return total
+
+
 def _roll(xp, a, shift):
     """Periodic shift of a (nz, ny, nx) array by shift = (sz, sy, sx) cells."""
     axes = [k for k, s in enumerate(shift) if s]
@@ -229,24 +316,60 @@ def velocity_and_force(xp, rho, momentum, cfg, forced: bool, dragged: bool):
     return u, force
 
 
+def _force_coefficient(order, u, force):
+    """Hermite coefficient of F . grad_u(u_x^p u_y^q u_z^r): the force term of `collide`."""
+    total = None
+    for k in range(3):
+        if order[k] == 0:
+            continue
+        term = order[k] * force[k]
+        for a in range(3):
+            for _ in range(order[a] - (1 if a == k else 0)):
+                term = term * u[a]
+        total = term if total is None else total + term
+    return total
+
+
 def collide(
     xp,
     lat: VelocitySet,
     f,
     cfg,
-    regularised: bool = True,
+    collision: str = "recursive",
     forced: bool = False,
     dragged: bool = False,
 ):
-    """The collision of step 3 and 4 above, at every cell; solid cells keep f."""
+    """The collision of step 3 and 4 above, at every cell; solid cells keep f.
+
+    Written for checking, not speed: the recursive collision goes through the 27 Hermite
+    coefficients one by one, as Coreixas et al. (2019) write it, which makes it an independent
+    check of the product form in `collide_moments`.
+    """
+    check_collision(lat, collision)
     rho = moment(f, [1] * lat.q)
     momentum = [moment(f, lat.c[:, a]) for a in range(3)]
     u, force = velocity_and_force(xp, rho, momentum, cfg, forced, dragged)
     forced = force is not None
+    # The second-order equilibrium and the extended one share rho, rho u and the momentum flux
+    # rho u u + rho c_s^2 I, so P is the same for both.
     feq = equilibrium(xp, lat, rho, u)
     p = flux(xp, lat, f, feq, u, force)
     tau = smagorinsky_tau(xp, p, rho, cfg["tau0"], cfg["cs"])
-    if regularised:
+    if collision == "recursive":
+        orders, build = hermite_basis(lat)
+        omega = 1.0 - 1.0 / tau
+        coeffs = []
+        for o in orders:
+            a = rho * u[0] ** o[0] * u[1] ** o[1] * u[2] ** o[2]
+            if sum(o) >= 2:
+                a = a + omega * _recursive_coefficient(o, u, p)
+            if forced and sum(o) >= 1:
+                a = a + 0.5 * _force_coefficient(o, u, force)
+            coeffs.append(a)
+        cells = f.shape[1:]
+        post = (xp.asarray(build) @ xp.stack(coeffs).reshape(27, -1)).reshape(lat.q, *cells)
+        return xp.where(cfg["fluid"], post, f)
+    if collision == "regularised":
         # With the force-corrected flux, the forcing enters at half weight whatever the rate
         # the stress relaxes at: m_post = m_eq + (1 - 1/tau) m_neq + F_m / 2.
         neq, pre = regularised_neq(xp, lat, p), 0.5
@@ -284,14 +407,16 @@ def collide_moments(
     lat: VelocitySet,
     f,
     cfg,
-    regularised: bool = True,
+    collision: str = "recursive",
     forced: bool = False,
     dragged: bool = False,
 ):
     """The same collision as `collide`, through the 10 moments: f -> M f -> H A.
 
     Two small matrix products per cell replace the sums over directions, which processors and
-    graphics cards do much faster. The result is the same to round-off (tests/test_wind_step.py).
+    graphics cards do much faster. The recursive collision is built in its product form
+    instead of the second matrix product. The result is the same to round-off
+    (tests/test_wind_step.py).
     """
     m_mat, h_mat = moment_matrices(lat)
     cells = f.shape[1:]
@@ -309,12 +434,18 @@ def collide_moments(
             pk = pk + 0.5 * uf[k]
         p.append(pk)
     tau = smagorinsky_tau(xp, p, rho, cfg["tau0"], cfg["cs"])
+    if collision == "recursive":
+        eq, neq, src = product_terms(xp, lat, rho, u, p, force if forced else None)
+        post = eq + (1.0 - 1.0 / tau) * neq
+        if forced:
+            post = post + 0.5 * src
+        return xp.where(cfg["fluid"], post, f)
     h = xp.asarray(h_mat, dtype=f.dtype)
 
     def build(moments):
         return (h @ xp.stack(moments).reshape(10, -1)).reshape(lat.q, *cells)
 
-    if regularised:
+    if collision == "regularised":
         omega = 1.0 - 1.0 / tau
         third = (p[0] + p[1] + p[2]) / 3.0
         a1 = [rho * u[a] + (0.5 * force[a] if forced else 0.0) for a in range(3)]
@@ -336,7 +467,7 @@ def step(
     lat: VelocitySet,
     f_post,
     cfg,
-    regularised=True,
+    collision="recursive",
     free_slip_top=False,
     forced=False,
     dragged=False,
@@ -344,4 +475,4 @@ def step(
 ):
     """One time step: stream, then collide. Takes and returns post-collision populations."""
     f = stream(xp, lat, f_post, cfg["solid"], free_slip_top, slip_floors)
-    return collide_moments(xp, lat, f, cfg, regularised, forced, dragged)
+    return collide_moments(xp, lat, f, cfg, collision, forced, dragged)

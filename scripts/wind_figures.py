@@ -101,7 +101,8 @@ def taylor_green_fields(out: Path, n: int = 64, tau: float = 0.8) -> None:
         return rho, ux, uy
 
     shape = (1, n, n)
-    s = Solver(D3Q19, np.zeros(shape, bool), Params(tau0=tau), "jax", np.float64)
+    s = Solver(D3Q19, np.zeros(shape, bool), Params(tau0=tau, collision="regularised"), "jax",
+               np.float64)  # fmt: skip
     rho, ux, uy = exact(0)
     s.set_flow(rho.reshape(shape), (ux.reshape(shape), uy.reshape(shape), np.zeros(shape)),
                settle=True)  # fmt: skip

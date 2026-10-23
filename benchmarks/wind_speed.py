@@ -1,14 +1,16 @@
 """Speed of the wind solver: million cell updates per second (MLUPS), and memory per cell.
 
 A realistic step on a 64 x 64 x 64 box: a solid ground layer and a block on it, a free-slip
-top, a body force, the Smagorinsky model and the regularised collision. For D3Q19 and D3Q27,
-in float32 and float64, compiled with JAX for this machine's processor (or graphics card, if
-JAX finds one). The first call is timed separately: it includes compiling. For comparison,
-D3Q19 also runs with the direction-by-direction collision (lbm.collide), and each run records
-how long one plain read and write of all the packets takes, the floor no step can beat.
+top, a body force and the Smagorinsky model. D3Q19 with the regularised collision, and D3Q27
+with the regularised and the recursive one (Step 12), in float32 and float64, compiled with
+JAX for this machine's processor (or graphics card, if JAX finds one). The first call is timed
+separately: it includes compiling. For comparison, D3Q19 also runs with the
+direction-by-direction form of the collision (lbm.collide), and each run records how long one
+plain read and write of all the packets takes, the floor no step can beat.
 
 Adds the runs to results/wind_speed_<device>.json, replacing earlier runs of the same
-lattice, precision, collision and box size.
+lattice, precision, collision, form and box size. Runs recorded before Step 12 have no "form":
+they are read as the regularised collision, which was then the only one.
 
     uv run python benchmarks/wind_speed.py [n]
 """
@@ -37,20 +39,21 @@ jax.config.update("jax_enable_x64", True)
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def measure(lat, dtype, n: int, steps: int, collision: str = "moments") -> dict:
-    """Time the step. collision="direct" runs the direction-by-direction collision
-    (lbm.collide) instead of the one through moments that the solver uses, for comparison."""
+def measure(lat, dtype, n: int, steps: int, collision: str, form: str = "moments") -> dict:
+    """Time the step. form="direct" runs the direction-by-direction collision (lbm.collide)
+    instead of the one through moments that the solver uses, for comparison."""
     solid = np.zeros((n, n, n), bool)
     solid[0] = True
     solid[1 : n // 4, n // 3 : n // 2, n // 3 : n // 2] = True
-    params = Params(tau0=0.5001, smagorinsky=0.15, g=(1e-6, 0.0, 0.0), free_slip_top=True)
+    params = Params(tau0=0.5001, smagorinsky=0.15, g=(1e-6, 0.0, 0.0), free_slip_top=True,
+                    collision=collision)  # fmt: skip
     s = Solver(lat, solid, params, "jax", dtype)
-    if collision == "direct":
+    if form == "direct":
         cfg = s.cfg
 
         def body(_, f):
             f = lbm.stream(jnp, lat, f, cfg["solid"], True)
-            return lbm.collide(jnp, lat, f, cfg, True, True)
+            return lbm.collide(jnp, lat, f, cfg, collision, True)
 
         loop = jax.jit(lambda f, k: jax.lax.fori_loop(0, k, body, f))
 
@@ -73,6 +76,7 @@ def measure(lat, dtype, n: int, steps: int, collision: str = "moments") -> dict:
         "lattice": lat.name,
         "dtype": np.dtype(dtype).name,
         "collision": collision,
+        "form": form,
         "cells": n**3,
         "steps": steps,
         "seconds": round(seconds, 3),
@@ -97,9 +101,11 @@ def copy_time(lat, dtype, n: int, repeats: int = 20) -> float:
 
 def main(n: int = 64, steps: int = 200) -> None:
     device = jax.devices()[0]
-    runs = [measure(lat, dt_, n, steps) for lat in (D3Q19, D3Q27)
+    kinds = ((D3Q19, "regularised"), (D3Q27, "regularised"), (D3Q27, "recursive"))
+    runs = [measure(lat, dt_, n, steps, collision) for lat, collision in kinds
             for dt_ in (np.float32, np.float64)]  # fmt: skip
-    runs += [measure(D3Q19, dt_, n, steps, "direct") for dt_ in (np.float32, np.float64)]
+    runs += [measure(D3Q19, dt_, n, steps, "regularised", "direct")
+             for dt_ in (np.float32, np.float64)]  # fmt: skip
     for r in runs:
         r["copy_seconds"] = round(copy_time(LATTICES[r["lattice"]], np.dtype(r["dtype"]), n), 5)
         r["step_seconds"] = round(r["seconds"] / r["steps"], 5)
@@ -110,12 +116,15 @@ def main(n: int = 64, steps: int = 200) -> None:
         r["device"] = {"platform": device.platform, "kind": device.device_kind}
         r["machine"] = {"cpus": os.cpu_count(), "system": platform.system()}
     path = ROOT / "results" / f"wind_speed_{device.platform}.json"
-    key = lambda r: (r["lattice"], r["dtype"], r["collision"], r["cells"])  # noqa: E731
+    key = lambda r: (r["lattice"], r["dtype"], r["collision"], r["form"], r["cells"])  # noqa: E731
     old = json.loads(path.read_text())["runs"] if path.is_file() else []
+    for r in old:
+        if "form" not in r:  # recorded before Step 12, when the collision was always regularised
+            r["form"], r["collision"] = r["collision"], "regularised"
     new_keys = {key(r) for r in runs}
     out = {
-        "what": "cell updates per second of the regularised Smagorinsky step with walls, force "
-        "and free-slip top",
+        "what": "cell updates per second of the Smagorinsky step with walls, force and "
+        "free-slip top",
         "runs": [r for r in old if "run_at" in r and key(r) not in new_keys] + runs,
     }
     path.write_text(json.dumps(out, indent=2) + "\n")

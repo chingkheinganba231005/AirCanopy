@@ -14,8 +14,11 @@ too coarse to resolve the flow, and show how the answer approaches the reference
 
     uv run python benchmarks/wind_tgv1600.py 64 128          # sizes; DNS mode
     uv run python benchmarks/wind_tgv1600.py 64 --smagorinsky 0.1
+    uv run python benchmarks/wind_tgv1600.py 64 --lattice D3Q19   # regularised, for comparison
 
-Writes results/wind_tgv1600_<device>.json (runs are added to what is already there).
+The default is D3Q27 with the recursive collision (Step 12); D3Q19 runs with the regularised
+one. Writes results/wind_tgv1600_<device>.json (runs are added to what is already there; runs
+recorded before Step 12 have no "collision" and used the regularised one).
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ import numpy as np
 
 from aircanopy import __version__
 from aircanopy.sources.cache import USER_AGENT, cache_dir
-from aircanopy.wind import cases
+from aircanopy.wind import cases, lbm
 from aircanopy.wind.lattice import LATTICES
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,10 +90,13 @@ def compare(run: dict, ref: np.ndarray) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("sizes", type=int, nargs="+")
-    parser.add_argument("--lattice", default="D3Q19", choices=sorted(LATTICES))
+    parser.add_argument("--lattice", default="D3Q27", choices=sorted(LATTICES))
+    parser.add_argument("--collision", choices=lbm.COLLISIONS,
+                        help="default: recursive on D3Q27, regularised on D3Q19")  # fmt: skip
     parser.add_argument("--smagorinsky", type=float, default=0.0)
     parser.add_argument("--t-end", type=float, default=20.0)
     args = parser.parse_args()
+    collision = args.collision or ("recursive" if args.lattice == "D3Q27" else "regularised")
     ref = reference()
     device = jax.devices()[0]
     path = ROOT / "results" / f"wind_tgv1600_{device.platform}.json"
@@ -102,7 +108,7 @@ def main() -> None:
     for n in args.sizes:
         start = time.perf_counter()
         run = cases.taylor_green_3d(LATTICES[args.lattice], n, smagorinsky=args.smagorinsky,
-                                    t_end=args.t_end)  # fmt: skip
+                                    collision=collision, t_end=args.t_end)  # fmt: skip
         run["seconds"] = round(time.perf_counter() - start, 1)
         run["run_at"] = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         run["aircanopy"] = __version__
@@ -110,13 +116,14 @@ def main() -> None:
         run["device"] = {"platform": device.platform, "kind": device.device_kind}
         run["dtype"] = "float32"
         run.update(compare(run, ref))
-        keep = ["n", "lattice", "smagorinsky", "seconds", "peak_dissipation", "peak_time"]
+        keep = ["n", "lattice", "collision", "smagorinsky", "seconds", "peak_dissipation"]
+        keep += ["peak_time"]
         keep += ["peak_relative_error", "peak_time_error", "max_energy_error", "criteria"]
         print({k: run[k] for k in keep if k in run})
         out["runs"] = [
             r for r in out["runs"]
-            if (r["n"], r["lattice"], r["smagorinsky"], r.get("dtype")) !=
-            (n, args.lattice, args.smagorinsky, "float32")
+            if (r["n"], r["lattice"], r.get("collision", "regularised"), r["smagorinsky"],
+                r.get("dtype")) != (n, args.lattice, collision, args.smagorinsky, "float32")
         ] + [run]  # fmt: skip
         path.write_text(json.dumps(out, indent=1) + "\n")
     print(f"wrote {path}")

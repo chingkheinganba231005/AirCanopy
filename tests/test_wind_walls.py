@@ -12,8 +12,11 @@ from aircanopy.wind.solver import Params, Solver
 
 jax.config.update("jax_enable_x64", True)
 
-LATS = [D3Q19, D3Q27]
-ids = lambda lat: lat.name  # noqa: E731
+#: Every collision on every lattice that allows it; the first of each lattice is its default.
+PAIRS = [(D3Q19, "regularised"), (D3Q19, "bgk"), (D3Q27, "recursive"), (D3Q27, "regularised"),
+         (D3Q27, "bgk")]  # fmt: skip
+DEFAULTS = [(D3Q19, "regularised"), (D3Q27, "recursive")]
+pair_ids = lambda pair: f"{pair[0].name}-{pair[1]}" if isinstance(pair, tuple) else str(pair)  # noqa: E731
 
 
 def test_drag_coefficient_from_the_law_of_the_wall():
@@ -37,14 +40,14 @@ def test_floor_cells_are_the_air_just_above_solid():
     assert (lam[~floors] == 0).all()
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
-def test_air_glides_over_a_free_slip_floor(lat):
+@pytest.mark.parametrize(("lat", "collision"), PAIRS, ids=pair_ids)
+def test_air_glides_over_a_free_slip_floor(lat, collision):
     # Without drag, a uniform wind over a slip floor under a free-slip top feels no friction.
     shape = (6, 4, 5)
     solid = np.zeros(shape, bool)
     solid[0] = True
-    s = Solver(lat, solid, Params(tau0=0.6, free_slip_top=True, slip_floors=True), "numpy",
-               np.float64)  # fmt: skip
+    params = Params(tau0=0.6, free_slip_top=True, slip_floors=True, collision=collision)
+    s = Solver(lat, solid, params, "numpy", np.float64)
     s.set_equilibrium(np.ones(shape), (np.full(shape, 0.05), np.full(shape, 0.02), 0 * solid))
     s.run(30)
     _, (ux, uy, uz) = s.fields()
@@ -53,23 +56,23 @@ def test_air_glides_over_a_free_slip_floor(lat):
     assert np.abs(uz[air]).max() < 1e-14
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
-def test_a_slip_floor_is_a_mirror_plane(lat):
+@pytest.mark.parametrize(("lat", "collision"), PAIRS, ids=pair_ids)
+def test_a_slip_floor_is_a_mirror_plane(lat, collision):
     """A box periodic in height 2h, whose flow is mirror-symmetric about two planes, must be
     reproduced exactly by its half: a slip floor below and a free-slip top above."""
     h, ny, nx = 4, 3, 5
     rng = np.random.default_rng(11)
     ux = 0.01 * rng.standard_normal((h, ny, nx))
     uz = 0.01 * rng.standard_normal((h, ny, nx))
-    full = Solver(lat, np.zeros((2 * h, ny, nx), bool), Params(tau0=0.6, smagorinsky=0.1),
-                  "numpy", np.float64)  # fmt: skip
+    params = {"tau0": 0.6, "smagorinsky": 0.1, "collision": collision}
+    full = Solver(lat, np.zeros((2 * h, ny, nx), bool), Params(**params), "numpy", np.float64)
     ux_full = np.concatenate([ux, ux[::-1]])
     uz_full = np.concatenate([uz, -uz[::-1]])
     full.set_equilibrium(np.ones(ux_full.shape), (ux_full, 0 * ux_full, uz_full))
     solid = np.zeros((h + 1, ny, nx), bool)
     solid[0] = True
-    half = Solver(lat, solid, Params(tau0=0.6, smagorinsky=0.1, free_slip_top=True,
-                                     slip_floors=True), "numpy", np.float64)  # fmt: skip
+    half = Solver(lat, solid, Params(**params, free_slip_top=True, slip_floors=True), "numpy",
+                  np.float64)  # fmt: skip
     zero = np.zeros((1, ny, nx))
     half.set_equilibrium(np.ones(solid.shape), (np.concatenate([zero, ux]), 0 * solid,
                                                  np.concatenate([zero, uz])))  # fmt: skip
@@ -82,9 +85,8 @@ def test_a_slip_floor_is_a_mirror_plane(lat):
     assert np.abs(u_half[0][1:]).max() > 1e-4  # the flow is not trivially zero
 
 
-@pytest.mark.parametrize("lat", LATS, ids=ids)
-@pytest.mark.parametrize("regularised", [True, False])
-def test_drag_is_the_same_through_moments(lat, regularised):
+@pytest.mark.parametrize(("lat", "collision"), PAIRS, ids=pair_ids)
+def test_drag_is_the_same_through_moments(lat, collision):
     shape = (4, 5, 6)
     rng = np.random.default_rng(12)
     rho = 1 + 0.01 * rng.standard_normal(shape)
@@ -94,17 +96,18 @@ def test_drag_is_the_same_through_moments(lat, regularised):
     cfg = {"solid": solid, "fluid": ~solid, "tau0": 0.52, "cs": 0.17, "g": (1e-5, 0.0, 2e-6),
            "drag": 0.5 * rng.random(shape)}  # fmt: skip
     for forced in (True, False):
-        direct = lbm.collide(np, lat, f, cfg, regularised, forced, dragged=True)
-        moments = lbm.collide_moments(np, lat, f, cfg, regularised, forced, dragged=True)
-        assert np.abs(direct - moments).max() < 1e-15
+        direct = lbm.collide(np, lat, f, cfg, collision, forced, dragged=True)
+        moments = lbm.collide_moments(np, lat, f, cfg, collision, forced, dragged=True)
+        assert np.abs(direct - moments).max() < (1e-14 if collision == "recursive" else 1e-15)
 
 
-def test_the_velocity_read_back_with_drag_is_the_one_set():
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_the_velocity_read_back_with_drag_is_the_one_set(lat, collision):
     shape = (3, 4, 5)
     rng = np.random.default_rng(13)
     drag = 0.8 * rng.random(shape)
-    s = Solver(D3Q19, np.zeros(shape, bool), Params(tau0=0.7, g=(1e-5, 0, 0)), "numpy",
-               np.float64, drag=drag)  # fmt: skip
+    params = Params(tau0=0.7, g=(1e-5, 0, 0), collision=collision)
+    s = Solver(lat, np.zeros(shape, bool), params, "numpy", np.float64, drag=drag)
     rho = 1 + 0.01 * rng.standard_normal(shape)
     u = tuple(0.05 * rng.standard_normal(shape) for _ in range(3))
     s.set_equilibrium(rho, u)
@@ -113,7 +116,8 @@ def test_the_velocity_read_back_with_drag_is_the_one_set():
     assert max(np.abs(u_back[k] - u[k]).max() for k in range(3)) < 1e-14
 
 
-def test_floor_friction_balances_the_push_of_the_wind():
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_floor_friction_balances_the_push_of_the_wind(lat, collision):
     """In a steady channel, the floor's friction holds back the force on the whole column:
     lambda / 2 U1^2 = g h for h cells of air, so U1 = sqrt(2 g h / lambda)."""
     h = 8
@@ -121,8 +125,9 @@ def test_floor_friction_balances_the_push_of_the_wind():
     solid[0] = True
     z0, g = 0.05, 2e-6
     drag = walls.rough_floor_drag(solid, z0)
-    s = Solver(D3Q19, solid, Params(tau0=0.8, g=(g, 0, 0), free_slip_top=True, slip_floors=True),
-               "jax", np.float64, drag=drag)  # fmt: skip
+    params = Params(tau0=0.8, g=(g, 0, 0), free_slip_top=True, slip_floors=True,
+                    collision=collision)  # fmt: skip
+    s = Solver(lat, solid, params, "jax", np.float64, drag=drag)
     lam = 2 * walls.drag_coefficient(z0)
     expected = math.sqrt(2 * g * h / lam)
     # Held back only by a quadratic drag, the column settles slowly (in about 1 / sqrt(g lambda /

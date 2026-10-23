@@ -1,6 +1,6 @@
 """Run the lattice Boltzmann step (lbm.py) with NumPy, for checking, or with JAX, compiled.
 
-    solver = Solver(D3Q19, solid, Params(tau0=0.8), backend="jax")
+    solver = Solver(D3Q27, solid, Params(tau0=0.8), backend="jax")
     solver.set_equilibrium(rho, (ux, uy, uz))
     solver.run(1000)
     rho, (ux, uy, uz) = solver.fields()
@@ -34,25 +34,26 @@ class Params:
     smagorinsky: float = 0.0
     #: Body acceleration (gx, gy, gz) in lattice units, the same in every cell; None for none.
     g: tuple[float, float, float] | None = None
-    #: Regularised collision (lbm.py); False gives plain BGK, kept for comparison.
-    regularised: bool = True
+    #: Collision model (lbm.COLLISIONS): "recursive" needs D3Q27; "regularised" and "bgk" are
+    #: kept for comparison and for D3Q19 (JOURNAL.md, Step 12).
+    collision: str = "recursive"
     free_slip_top: bool = False
     #: Floors (solid below air) are free-slip, for a wall model (lbm.stream, walls.py).
     slip_floors: bool = False
 
 
 @functools.cache
-def _jax_runner(lattice: str, flags: tuple[bool, ...]):
+def _jax_runner(lattice: str, flags: tuple):
     import jax
     import jax.numpy as jnp
 
     lat = LATTICES[lattice]
-    regularised, free_slip_top, forced, dragged, slip_floors = flags
+    collision, free_slip_top, forced, dragged, slip_floors = flags
 
     def run(f, cfg, n):
         def body(_, f):
             return lbm.step(
-                jnp, lat, f, cfg, regularised, free_slip_top, forced, dragged, slip_floors
+                jnp, lat, f, cfg, collision, free_slip_top, forced, dragged, slip_floors
             )
 
         return jax.lax.fori_loop(0, n, body, f)
@@ -77,6 +78,7 @@ class Solver:
             raise ValueError("with a free-slip top, the top layer must be air, the bottom solid")
         if drag is not None and np.shape(drag) != solid.shape:
             raise ValueError("drag must have the same shape as solid")
+        lbm.check_collision(lat, params.collision)
         if backend == "jax":
             import jax
             import jax.numpy as xp
@@ -109,10 +111,22 @@ class Solver:
         self.set_equilibrium(ones, (0 * ones, 0 * ones, 0 * ones))
 
     @property
-    def _flags(self) -> tuple[bool, ...]:
+    def _flags(self) -> tuple:
         p = self.params
-        return (p.regularised, p.free_slip_top, p.g is not None, self.drag is not None,
+        return (p.collision, p.free_slip_top, p.g is not None, self.drag is not None,
                 p.slip_floors)  # fmt: skip
+
+    def _equilibrium(self, xp, rho, u):
+        """The equilibrium the collision relaxes to: the extended one for "recursive"."""
+        if self.params.collision == "recursive":
+            return lbm.product_terms(xp, self.lat, rho, u)[0]
+        return lbm.equilibrium(xp, self.lat, rho, u)
+
+    def _neq(self, xp, rho, u, p):
+        """The non-equilibrium packets the collision builds from the flux p (PAIRS order)."""
+        if self.params.collision == "recursive":
+            return lbm.product_terms(xp, self.lat, rho, u, p)[1]
+        return lbm.regularised_neq(xp, self.lat, p)
 
     def _post_velocity(self, u):
         """The velocity of a post-collision state whose collision velocity is u.
@@ -152,7 +166,7 @@ class Solver:
         """
         xp = self.xp
         as_x = lambda a: xp.asarray(np.asarray(a, dtype=np.float64), dtype=self.dtype)  # noqa: E731
-        f = lbm.equilibrium(xp, self.lat, as_x(rho), tuple(as_x(c) for c in self._post_velocity(u)))
+        f = self._equilibrium(xp, as_x(rho), tuple(as_x(c) for c in self._post_velocity(u)))
         self.f = xp.asarray(f, dtype=self.dtype)
 
     def set_flow(
@@ -186,8 +200,9 @@ class Solver:
         p = self.params
         tau = p.tau0 + p.smagorinsky**2 * s_norm / CS2
         stress = [-2.0 * rho * CS2 * tau * strain[a, b] for a, b in lbm.PAIRS]
-        f = lbm.equilibrium(np, self.lat, rho, self._post_velocity(u))
-        f = f + (1.0 - 1.0 / tau) * lbm.regularised_neq(np, self.lat, stress)
+        post_u = self._post_velocity(u)
+        f = self._equilibrium(np, rho, post_u)
+        f = f + (1.0 - 1.0 / tau) * self._neq(np, rho, post_u, stress)
         steps = 0
         if settle:
             if p.g is not None or self.drag is not None:
@@ -197,10 +212,11 @@ class Solver:
                 steps += 1
                 f = lbm.stream(np, lat, f, self.solid, p.free_slip_top, p.slip_floors)
                 rho_now = lbm.moment(f, [1] * lat.q)
-                feq = lbm.equilibrium(np, lat, rho_now, u)
-                flux = lbm.flux(np, lat, f, feq, u)
+                # P is the same with either equilibrium (lbm.collide).
+                flux = lbm.flux(np, lat, f, lbm.equilibrium(np, lat, rho_now, u), u)
+                feq = self._equilibrium(np, rho_now, u)
                 tau = lbm.smagorinsky_tau(np, flux, rho_now, p.tau0, p.smagorinsky)
-                neq = lbm.regularised_neq(np, lat, flux) if p.regularised else f - feq
+                neq = f - feq if p.collision == "bgk" else self._neq(np, rho_now, u, flux)
                 f = np.where(fluid, feq + (1.0 - 1.0 / tau) * neq, f)
                 change = np.abs(rho_now - previous)[fluid].max()
                 previous = rho_now
