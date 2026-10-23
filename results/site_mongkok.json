@@ -1,0 +1,177 @@
+{
+  "what": "a 1 km square in Mong Kok, Hong Kong, found by name (build times: build_time_mongkok.json)",
+  "command": "aircanopy site build --place \"Mong Kok\" --pick 2 --size 1000 --name mongkok",
+  "run_at": "2026-10-23T12:35:40Z",
+  "aircanopy": "0.1.0",
+  "name": "mongkok",
+  "bbox": [
+    114.16495747719797,
+    22.31590029907844,
+    114.17466352280202,
+    22.324930898408418
+  ],
+  "size_m": [
+    1000.0,
+    1000.0
+  ],
+  "buildings": 1479,
+  "building_heights": {
+    "estimated:neighbour-median": 377,
+    "missing": 73,
+    "osm:height": 63,
+    "osm:levels": 966
+  },
+  "height_kinds": {
+    "measured": 0,
+    "mapped": 63,
+    "levels": 966,
+    "ml": 0,
+    "estimated": 377,
+    "missing": 73
+  },
+  "footprint_sources": {
+    "osm": 1430,
+    "overture:doi:10.5281/zenodo.8174931": 49
+  },
+  "buildings_without_height": 73,
+  "estimated_from_neighbours": 377,
+  "tallest_building_m": 255.0,
+  "trees": 139,
+  "trees_with_height": 126,
+  "roads": 592,
+  "footways": 1044,
+  "skipped": 58,
+  "voxels": {
+    "dx_m": 2.0,
+    "shape_zyx": [
+      131,
+      501,
+      501
+    ],
+    "building_cells": 1502953,
+    "ground_cells": 1969413
+  },
+  "terrain": {
+    "file": "terrain.npz",
+    "model": "gedtm30",
+    "kind": "terrain",
+    "vertical_datum": "EGM2008 geoid (about mean sea level)",
+    "grid_m": 20.0,
+    "ground_min_m": 2.8,
+    "ground_max_m": 57.2,
+    "std_mean_m": 1.6
+  },
+  "assumptions": {
+    "A-001": {
+      "storey_height_m": 3.0
+    },
+    "A-002": {
+      "radius_m": 100.0,
+      "min_neighbours": 3
+    }
+  },
+  "overture": {
+    "release": "2026-10-21.0",
+    "buildings_read": 1358,
+    "added": 49,
+    "heights_improved": 0,
+    "duplicates_left_out": 0,
+    "underground_left_out": 1,
+    "added_by_dataset": {
+      "doi:10.5281/zenodo.8174931": 49
+    },
+    "heights_by_dataset": {}
+  },
+  "credits": [
+    {
+      "dataset": "OpenStreetMap",
+      "credit": "© OpenStreetMap contributors",
+      "licence": "ODbL-1.0",
+      "buildings": 1430
+    },
+    {
+      "dataset": "doi:10.5281/zenodo.8174931",
+      "credit": "Qian Shi et al., A First High-quality Vector Data of Buildings in East Asian Countries Based on a Comprehensive Large-scale Mapping Framework, Zenodo, 22 July 2023, doi:10.5281/zenodo.8174931",
+      "licence": "CC-BY-4.0",
+      "buildings": 49
+    }
+  ],
+  "sources": [
+    {
+      "geocoder": "https://nominatim.openstreetmap.org/search",
+      "query": "Mong Kok",
+      "pick": 2,
+      "place": {
+        "name": "Mong Kok, Yau Tsim Mong District, Kowloon, Hong Kong, China",
+        "lon": 114.1698105,
+        "lat": 22.3204156,
+        "kind": "place/suburb",
+        "osm": "node/1295654855",
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright"
+      },
+      "licence": "ODbL-1.0",
+      "attribution": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright"
+    },
+    {
+      "path": "map_114.164957_22.315900_114.174664_22.324931.osm",
+      "url": "https://api.openstreetmap.org/api/0.6/map?bbox=114.1649575,22.3159003,114.1746635,22.3249309",
+      "accessed": "2026-10-23T12:20:56Z",
+      "bytes": 11112924,
+      "sha256": "e656d0bd617318171aa2fbde96ad2fbb575eb69200b4604d4a33e40c3def4de9",
+      "licence": "ODbL-1.0",
+      "attribution": "© OpenStreetMap contributors"
+    },
+    {
+      "path": "buildings_2026-10-21.0_114.1649575_22.3159003_114.1746635_22.3249309.parquet",
+      "url": "https://stac.overturemaps.org/catalog.json#release=2026-10-21.0&theme=buildings&type=building&bbox=114.1649575,22.3159003,114.1746635,22.3249309",
+      "accessed": "2026-10-23T12:21:02Z",
+      "bytes": 229385,
+      "sha256": "857a67fde7674f190ce9492b8dbddab2077a82c49a1dae43cfc2c87d36d772c0",
+      "licence": "ODbL-1.0",
+      "attribution": "© OpenStreetMap contributors, Overture Maps Foundation",
+      "release": "2026-10-21.0"
+    },
+    {
+      "path": "gedtm30_114.154764_22.306417_114.184857_22.334412.tif",
+      "url": "https://s3.opengeohub.org/global/dtm/v1.2/gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif",
+      "accessed": "2026-10-23T12:21:05Z",
+      "bytes": 46568,
+      "sha256": "1f64c5716e307f0ae01a92860012852ee3eff38fc16364711776b37bbfc997cc",
+      "licence": "CC-BY-4.0",
+      "attribution": "GEDTM30 v1.2, Yufeng Ho and Tom Hengl, OpenGeoHub, doi:10.5281/zenodo.18887460"
+    },
+    {
+      "path": "meta_wri_v1_114.164957_22.315900_114.174664_22.324931.tif",
+      "url": "https://dataforgood-fb-data.s3.amazonaws.com/forests/v1/alsgedi_global_v6_float/chm/132122232.tif",
+      "accessed": "2026-10-23T12:21:13Z",
+      "bytes": 44474,
+      "sha256": "964697501f3b5710bf233a296f0da060a8ee1d58bc14c385aa9fc404d657e068",
+      "licence": "CC-BY-4.0",
+      "attribution": "Meta and World Resources Institute (WRI) 2024, High Resolution Canopy Height Maps; source imagery © 2016 Maxar"
+    }
+  ],
+  "canopy": {
+    "file": "canopy.npz",
+    "model": "meta-wri-chm-v1",
+    "imagery_dates": [
+      "2018-10-04"
+    ],
+    "grid_m": 1.0,
+    "cover_share": 0.0273,
+    "cover_min_height_m": 5.0,
+    "cells_removed_inside_buildings": 31575,
+    "crowns": 125,
+    "mapped_matched": 6,
+    "mapped_alone": 14,
+    "crown_height_m": {
+      "min": 5.0,
+      "median": 8.0,
+      "max": 18.0
+    },
+    "crown_diameter_m": {
+      "min": 3.2,
+      "median": 12.7,
+      "max": 38.8
+    }
+  }
+}

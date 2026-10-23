@@ -16,7 +16,8 @@
 - Trees: nodes tagged `natural=tree`, with height, crown diameter, trunk circumference, species
   and leaf type when mapped.
 - Roads: ways whose `highway` value is a road for vehicles; footways and other paths are kept
-  separately (they are where people walk, which matters for comfort and exposure).
+  separately (they are where people walk, which matters for comfort and exposure). Paths
+  inside buildings (corridors, and ways tagged `indoor`) are skipped.
 
 Features that are mapped but not modelled yet are listed in `Site.skipped` with the reason.
 """
@@ -54,7 +55,11 @@ ROAD_CLASSES = frozenset(
     }
 )
 #: Highway values where people walk or cycle.
-FOOT_CLASSES = frozenset({"footway", "pedestrian", "path", "steps", "cycleway", "corridor"})
+FOOT_CLASSES = frozenset({"footway", "pedestrian", "path", "steps", "cycleway"})
+#: Paths inside buildings: `highway=corridor` is "For a hallway inside of a building"
+#: (https://wiki.openstreetmap.org/wiki/Key:highway, read 2026-10-23), and any path or road
+#: tagged `indoor` (other than `indoor=no`) is inside one too.
+INDOOR_REASON = "indoor path (the model is of the open air)"
 
 
 def _is_yes(value: str | None) -> bool:
@@ -223,7 +228,10 @@ def roads_from_osm(
     roads, foot = [], []
     for wid, (refs, tags) in data.ways.items():
         cls = tags.get("highway")
-        if cls not in ROAD_CLASSES and cls not in FOOT_CLASSES:
+        if cls not in ROAD_CLASSES and cls not in FOOT_CLASSES and cls != "corridor":
+            continue
+        if cls == "corridor" or _is_yes(tags.get("indoor")):
+            skipped.append({"id": f"osm:way/{wid}", "reason": INDOOR_REASON})
             continue
         coords = proj.coords(refs)
         if coords is None or len(coords) < 2:

@@ -1,7 +1,8 @@
 {
   "what": "site built from OpenStreetMap, Overture Maps, the GEDTM30 terrain model and the Meta/WRI canopy height map: a 500 m square around HKU",
   "command": "aircanopy site build --around 114.1370,22.2840,500 --name hku",
-  "run_at": "2026-10-23T10:19:48Z",
+  "run_at": "2026-10-23T12:35:34Z",
+  "aircanopy": "0.1.0",
   "name": "hku",
   "bbox": [
     114.13457411746967,
@@ -37,8 +38,8 @@
   "trees": 179,
   "trees_with_height": 174,
   "roads": 133,
-  "footways": 381,
-  "skipped": 10,
+  "footways": 362,
+  "skipped": 29,
   "voxels": {
     "dx_m": 2.0,
     "shape_zyx": [

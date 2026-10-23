@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from aircanopy.geo import BBox, LocalFrame
-from aircanopy.site.from_osm import site_from_osm
+from aircanopy.site.from_osm import INDOOR_REASON, site_from_osm
 from aircanopy.site.heights import STOREY_HEIGHT_M
 from aircanopy.site.model import Site
 from aircanopy.sources import osm
@@ -83,6 +83,20 @@ def test_trees_and_roads():
     assert (road.highway, road.lanes, road.width) == ("primary", 4, 14)
     assert road.line.length == pytest.approx(160, rel=1e-6)
     assert [f.highway for f in site.footways] == ["footway"]
+
+
+def test_paths_inside_buildings_are_left_out():
+    b = OsmBuilder()
+    line = lambda y: [b.node(-40, y), b.node(40, y)]  # noqa: E731
+    b.way(line(0), {"highway": "corridor"})
+    b.way(line(5), {"highway": "footway", "indoor": "yes"})
+    b.way(line(10), {"highway": "steps", "indoor": "corridor"})
+    kept = b.way(line(15), {"highway": "footway", "indoor": "no"})
+    b.way(line(20), {"barrier": "fence"})  # not a path at all: ignored, not listed
+    bbox = BBox(LON0 - 0.001, LAT0 - 0.001, LON0 + 0.001, LAT0 + 0.001)
+    site = site_from_osm("test", bbox, osm.parse(b.xml()))
+    assert [f.id for f in site.footways] == [f"osm:way/{kept}"]
+    assert [s["reason"] for s in site.skipped] == [INDOOR_REASON] * 3
 
 
 def test_site_round_trips_through_json(tmp_path):
