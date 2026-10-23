@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from . import lbm
-from .lattice import LATTICES, VelocitySet
+from .lattice import CS2, LATTICES, VelocitySet
 
 
 @dataclass(frozen=True)
@@ -107,6 +107,62 @@ class Solver:
         if g is not None:
             u = tuple(np.asarray(u[a]) + 0.5 * g[a] for a in range(3))
         self.f = lbm.equilibrium(xp, self.lat, as_x(rho), tuple(as_x(c) for c in u))
+
+    def set_flow(
+        self, rho, u, settle: bool = False, tolerance: float = 1e-12, max_steps: int = 50_000
+    ) -> int:
+        """Start from the given density and velocity, with the stress their gradients carry.
+
+        A bare equilibrium has no viscous stress: in the first steps momentum then diffuses at
+        the wrong rate, and sound waves start (Skordos 1993; Mei et al. 2006). So the packets
+        also get the non-equilibrium part that the Chapman-Enskog expansion gives for the
+        velocity gradients, P = -rho c_s^2 tau (grad u + grad u^T), relaxed as one collision
+        would (times 1 - 1/tau, since the state is post-collision). The gradients are central
+        differences, periodic at the edges of the box.
+
+        A density that is only nearly right still starts sound waves. With `settle`, the step
+        then runs with the velocity in the equilibrium held at u, so that only the density and
+        the stress change, until the density changes by less than `tolerance` in a step (Mei et
+        al. 2006). Returns the number of settling steps.
+        """
+        rho = np.asarray(rho, dtype=np.float64)
+        u = tuple(np.asarray(c, dtype=np.float64) for c in u)
+        # d u_a / d x_b; x, y, z are array axes 2, 1, 0.
+        grad = [
+            [(np.roll(u[a], -1, axis=2 - b) - np.roll(u[a], 1, axis=2 - b)) / 2 for b in range(3)]
+            for a in range(3)
+        ]
+        strain = {(a, b): 0.5 * (grad[a][b] + grad[b][a]) for a, b in lbm.PAIRS}
+        s_norm = np.sqrt(
+            2.0 * sum((1.0 if a == b else 2.0) * strain[a, b] ** 2 for a, b in lbm.PAIRS)
+        )
+        p = self.params
+        tau = p.tau0 + p.smagorinsky**2 * s_norm / CS2
+        stress = [-2.0 * rho * CS2 * tau * strain[a, b] for a, b in lbm.PAIRS]
+        if p.g is not None:
+            u = tuple(u[a] + 0.5 * p.g[a] for a in range(3))
+        f = lbm.equilibrium(np, self.lat, rho, u)
+        f = f + (1.0 - 1.0 / tau) * lbm.regularised_neq(np, self.lat, stress)
+        steps = 0
+        if settle:
+            if p.g is not None:
+                raise ValueError("settling is written for flows without a body force")
+            lat, fluid, previous = self.lat, ~self.solid, rho
+            while steps < max_steps:
+                steps += 1
+                f = lbm.stream(np, lat, f, self.solid, p.free_slip_top)
+                rho_now = lbm.moment(f, [1] * lat.q)
+                feq = lbm.equilibrium(np, lat, rho_now, u)
+                flux = lbm.flux(np, lat, f, feq, u)
+                tau = lbm.smagorinsky_tau(np, flux, rho_now, p.tau0, p.smagorinsky)
+                neq = lbm.regularised_neq(np, lat, flux) if p.regularised else f - feq
+                f = np.where(fluid, feq + (1.0 - 1.0 / tau) * neq, f)
+                change = np.abs(rho_now - previous)[fluid].max()
+                previous = rho_now
+                if change < tolerance:
+                    break
+        self.f = self.xp.asarray(f, dtype=self.dtype)
+        return steps
 
     def run(self, n: int) -> None:
         p = self.params
