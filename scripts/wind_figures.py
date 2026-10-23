@@ -172,11 +172,71 @@ def lattices(out: Path) -> None:
     plt.close(fig)
 
 
+def _label_ends(ax, items) -> None:
+    """Label each line at its right end, nudged apart so the labels do not overlap.
+
+    items: (x, y, text, colour) for each line's last point.
+    """
+    fig = ax.figure
+    fig.canvas.draw()
+    to_px = ax.transData.transform
+    gap = 8.5 / 72 * fig.dpi * 1.15  # one line of 8.5-point text, in pixels
+    placed = []
+    for x, y, text, _ in sorted(items, key=lambda it: it[1]):
+        px = to_px((x, y))[1]
+        if placed and px - placed[-1] < gap:
+            px = placed[-1] + gap
+        placed.append(px)
+        y_label = ax.transData.inverted().transform((0, px))[1]
+        ax.annotate(text, (x, y), xytext=(x + 0.4, y_label), textcoords="data", va="center",
+                    fontsize=8.5, color=INK, annotation_clip=False)  # fmt: skip
+
+
+def tgv_dissipation(out: Path) -> None:
+    """The 3D Taylor-Green vortex at Re 1600: dissipation rate against time, every grid run
+    without a turbulence model, and the 512^3 pseudo-spectral reference (not stored in the
+    repository: read from the cache, see benchmarks/wind_tgv1600.py)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("tgv", ROOT / "benchmarks" / "wind_tgv1600.py")
+    tgv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tgv)
+    ref = tgv.reference()
+    runs = []
+    for device in ("cpu", "gpu"):
+        path = ROOT / "results" / f"wind_tgv1600_{device}.json"
+        if path.is_file():
+            runs += [r for r in json.loads(path.read_text())["runs"] if r["smagorinsky"] == 0.0]
+    best = {}
+    for r in runs:  # one run per grid size and lattice; the graphics card's if there are two
+        best[(r["n"], r["lattice"])] = r
+    fig, ax = plt.subplots(figsize=(7.6, 4.6), dpi=150, facecolor=SURFACE)
+    _style(ax)
+    ax.plot(ref[:, 0], ref[:, 2], color=INK, linewidth=2.2, label="reference: spectral, 512³")
+    ends = [(20.0, float(ref[-1, 2]), "reference", INK)]
+    for k, ((n, lattice), r) in enumerate(sorted(best.items())):
+        colour = SERIES[k % len(SERIES)]
+        label = f"{n}³, {lattice}"
+        ax.plot(r["times"], r["dissipation"], color=colour, linewidth=1.6, label=label)
+        ends.append((r["times"][-1], r["dissipation"][-1], label, colour))
+    ax.set_xlim(0, 24.5)
+    ax.set_xlabel("time, in units of L / V0", color=INK)
+    ax.set_ylabel("dissipation rate -dE/dt (in V0³ / L)", color=INK)
+    ax.set_title("Taylor-Green vortex at Re 1600: how fast the kinetic energy is lost",
+                 color=INK, fontsize=11, loc="left")  # fmt: skip
+    ax.legend(frameon=False, fontsize=8.5, labelcolor=INK, loc="upper left")
+    _label_ends(ax, ends)
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+
+
 def main() -> None:
     images = ROOT / "docs" / "images"
     lattices(images / "wind_lattices.png")
     convergence(images / "wind_convergence.png")
     taylor_green_fields(images / "wind_taylor_green.png")
+    tgv_dissipation(images / "wind_tgv1600.png")
 
 
 if __name__ == "__main__":
