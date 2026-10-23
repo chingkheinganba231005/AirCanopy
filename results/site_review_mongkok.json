@@ -1,6 +1,6 @@
 {
   "what": "share of buildings, footprint area and volume by kind of height; the largest buildings with estimated heights; towers tagged location=podium",
-  "run_at": "2026-10-23T12:35:57Z",
+  "run_at": "2026-10-23T12:39:29Z",
   "aircanopy": "0.1.0",
   "site": "mongkok",
   "site_built": "2026-10-23T12:35:40Z",
@@ -74,5 +74,36 @@
   "location_podium": {
     "buildings": 25,
     "without_min_level_or_min_height": 15
+  },
+  "tallest": [
+    {
+      "id": "osm:way/1049552294",
+      "name": null,
+      "height_m": 255.0,
+      "height_kind": "mapped"
+    },
+    {
+      "id": "osm:way/1049552290",
+      "name": null,
+      "height_m": 245.0,
+      "height_kind": "mapped"
+    },
+    {
+      "id": "osm:way/1049552291",
+      "name": null,
+      "height_m": 235.0,
+      "height_kind": "mapped"
+    }
+  ],
+  "roads_and_paths_inside_the_square": {
+    "in_tunnels": 10,
+    "in_tunnels_m": 128,
+    "on_bridges": 157,
+    "on_bridges_m": 5348
+  },
+  "skipped_in_the_download_by_reason": {
+    "underground (the model is above the ground)": 4,
+    "open roof structure (not modelled yet)": 43,
+    "indoor path (the model is of the open air)": 11
   }
 }

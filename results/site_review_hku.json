@@ -1,6 +1,6 @@
 {
   "what": "share of buildings, footprint area and volume by kind of height; the largest buildings with estimated heights; towers tagged location=podium",
-  "run_at": "2026-10-23T12:35:57Z",
+  "run_at": "2026-10-23T12:39:30Z",
   "aircanopy": "0.1.0",
   "site": "hku",
   "site_built": "2026-10-23T12:35:34Z",
@@ -74,5 +74,36 @@
   "location_podium": {
     "buildings": 6,
     "without_min_level_or_min_height": 4
+  },
+  "tallest": [
+    {
+      "id": "osm:way/854041999",
+      "name": null,
+      "height_m": 114.0,
+      "height_kind": "levels"
+    },
+    {
+      "id": "osm:way/322839610",
+      "name": "Tower 1",
+      "height_m": 111.0,
+      "height_kind": "levels"
+    },
+    {
+      "id": "osm:way/322839524",
+      "name": "Block 1",
+      "height_m": 108.0,
+      "height_kind": "levels"
+    }
+  ],
+  "roads_and_paths_inside_the_square": {
+    "in_tunnels": 25,
+    "in_tunnels_m": 1159,
+    "on_bridges": 58,
+    "on_bridges_m": 1662
+  },
+  "skipped_in_the_download_by_reason": {
+    "underground (the model is above the ground)": 1,
+    "open roof structure (not modelled yet)": 9,
+    "indoor path (the model is of the open air)": 19
   }
 }

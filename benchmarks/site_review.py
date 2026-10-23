@@ -6,6 +6,7 @@ For a site folder made by `aircanopy site build`, and the OpenStreetMap file it 
 
 - the share of buildings, of footprint area and of volume for each kind of height;
 - the largest buildings whose height was estimated from their neighbours, with their names;
+- the tallest buildings, roads and paths in tunnels and on bridges, and the features left out;
 - the buildings tagged `location=podium`. The OpenStreetMap wiki does not define this value
   (https://wiki.openstreetmap.org/wiki/Key:location, read 2026-10-23), and it defines
   `building:levels` as counted from the ground, skipped levels included
@@ -27,6 +28,8 @@ import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
+
+import shapely
 
 from aircanopy import __version__
 from aircanopy.site.heights import HEIGHT_KINDS, height_kind
@@ -90,6 +93,15 @@ def main(site_dir: Path) -> None:
     podium_without_start = [
         i for i, t in podium.items() if "building:min_level" not in t and "min_height" not in t
     ]
+    tallest = sorted((b for b in site.buildings if b.height), key=lambda b: -b.height)[:3]
+    square = shapely.box(*site.extent())
+    ways = site.roads + site.footways
+
+    def inside_m(lines) -> float:
+        return round(sum(r.line.intersection(square).length for r in lines))
+
+    tunnels = [r for r in ways if r.tunnel]
+    bridges = [r for r in ways if r.bridge]
     result = {
         "what": "share of buildings, footprint area and volume by kind of height; the largest "
         "buildings with estimated heights; towers tagged location=podium",
@@ -107,6 +119,22 @@ def main(site_dir: Path) -> None:
             "buildings": len(podium),
             "without_min_level_or_min_height": len(podium_without_start),
         },
+        "tallest": [
+            {
+                "id": b.id,
+                "name": tags.get(b.id, {}).get("name:en") or tags.get(b.id, {}).get("name"),
+                "height_m": b.height,
+                "height_kind": height_kind(b.height_source, b.height_dataset),
+            }
+            for b in tallest
+        ],
+        "roads_and_paths_inside_the_square": {
+            "in_tunnels": len(tunnels),
+            "in_tunnels_m": inside_m(tunnels),
+            "on_bridges": len(bridges),
+            "on_bridges_m": inside_m(bridges),
+        },
+        "skipped_in_the_download_by_reason": dict(Counter(s["reason"] for s in site.skipped)),
     }
     out = ROOT / "results" / f"site_review_{summary['name']}.json"
     out.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
