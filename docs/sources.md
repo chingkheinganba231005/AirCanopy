@@ -37,6 +37,16 @@ checked. Anything that could not be checked is marked `UNVERIFIED`.
 | What the geocoder answers for "University of Hong Kong", "The University of Hong Kong" and "Mong Kok" | Our own queries, `benchmarks/place_names.py` → `results/place_names.json` | 2026-10-23 |
 | Build times with and without downloads, and the bytes downloaded, for the HKU and Mong Kok sites | Our own measurement, `benchmarks/build_time.py` → `results/build_time_hku.json`, `results/build_time_mongkok.json` | 2026-10-23 |
 | Shares of buildings, footprint area and volume by kind of height; the largest buildings with estimated heights; `location=podium` towers; tunnels, bridges and features left out | Our own computation, `benchmarks/site_review.py` → `results/site_review_hku.json`, `results/site_review_mongkok.json` | 2026-10-23 |
+| The textbook account of the lattice Boltzmann method: velocity sets and their isotropy conditions, lattice units, the Mach-number limit (errors grow with Ma²), boundaries, forcing | Krüger, Kusumaatmaja, Kuzmin, Shardt, Silva and Viggen, *The Lattice Boltzmann Method: Principles and Practice*, Springer 2017, doi:10.1007/978-3-319-44649-3 (bibliographic record checked on Crossref; the book itself not read in this container) | 2026-10-23 |
+| Regularised collision: rebuild the non-equilibrium packets from the stress alone | Latt and Chopard, "Lattice Boltzmann method with regularized pre-collision distribution functions", Mathematics and Computers in Simulation 72:165–168 (2006), doi:10.1016/j.matcom.2006.05.017 | 2026-10-23 |
+| Forcing term, and the half-force correction of the velocity | Guo, Zheng and Shi, "Discrete lattice effects on the forcing term in the lattice Boltzmann method", Physical Review E 65:046308 (2002), doi:10.1103/PhysRevE.65.046308 | 2026-10-23 |
+| Smagorinsky model with the strain rate from the non-equilibrium packets | Hou, Sterling, Chen and Doolen, "A lattice Boltzmann subgrid model for high Reynolds number flows", arXiv comp-gas/9401004 (1994) | 2026-10-23 |
+| Bulk and shear viscosities; removing the trace of the non-equilibrium stress damps sound | Dellar, "Bulk and shear viscosities in lattice Boltzmann equations", Physical Review E 64:031203 (2001), doi:10.1103/PhysRevE.64.031203 | 2026-10-23 |
+| Starting a flow with the non-equilibrium part from the velocity gradients | Skordos, "Initial and boundary conditions for the lattice Boltzmann method", Physical Review E 48:4823–4842 (1993), doi:10.1103/PhysRevE.48.4823 | 2026-10-23 |
+| Consistent initial conditions: settle the density with the velocity held | Mei, Luo, Lallemand and d'Humières, "Consistent initial conditions for lattice Boltzmann simulations", Computers & Fluids 35:855–862 (2006), doi:10.1016/j.compfluid.2005.08.008 | 2026-10-23 |
+| The choice of velocity set affects rotational invariance in 3D | White and Chong, "Rotational invariance in the three-dimensional lattice Boltzmann method is dependent on the choice of lattice", Journal of Computational Physics 230:6367–6378 (2011), doi:10.1016/j.jcp.2011.04.031 (title and record checked on Crossref) | 2026-10-23 |
+| Errors of the wind solver against the shear wave, Poiseuille flow and the Taylor–Green vortex, and their orders of convergence | Our own computation, `benchmarks/wind_exact.py` → `results/wind_exact.json` | 2026-10-23 |
+| Speed of the wind solver on the container's processor | Our own measurement, `benchmarks/wind_speed.py` → `results/wind_speed_cpu.json` | 2026-10-23 |
 
 ## Software
 
@@ -55,6 +65,15 @@ Licences from the PyPI metadata of each package.
 | scikit-image | BSD-3-Clause | 2026-10-23 |
 | pytest, ruff (development only) | MIT | 2026-10-23 |
 | hatchling (build only) | MIT | 2026-10-23 |
+| jax 0.11.2, jaxlib 0.11.2 (the wind solver) | Apache-2.0 | 2026-10-23 |
+| ml-dtypes 0.6.0, opt-einsum 3.4.0 (needed by JAX) | Apache-2.0; MIT | 2026-10-23 |
+| matplotlib 3.11.2 (pictures for the journal; the optional `docs` group only) | Matplotlib License (a permissive licence based on the PSF licence) | 2026-10-23 |
+| contourpy 1.4.0, cycler 0.12.1, kiwisolver 1.5.1 (needed by matplotlib) | BSD-3-Clause; BSD; BSD | 2026-10-23 |
+| fonttools 4.66.1, pyparsing 3.3.3, python-dateutil 2.9.0.post0, six 1.17.0 (needed by matplotlib) | MIT; MIT; Apache-2.0 or BSD; MIT | 2026-10-23 |
+
+Releases published in the last two weeks are held back (D-009): `pyproject.toml` sets uv's
+`exclude-newer` date (D-017). In the viewer, vitest 5.0.5 was eight days old when taken, to fix
+an install failure of 5.0.3; that is the exception D-009 allows.
 
 ### Viewer (`ui/`)
 

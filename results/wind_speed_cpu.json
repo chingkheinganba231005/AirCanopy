@@ -1,6 +1,6 @@
 {
   "what": "cell updates per second of the regularised Smagorinsky step with walls, force and free-slip top",
-  "run_at": "2026-10-23T13:17:34Z",
+  "run_at": "2026-10-23T13:29:09Z",
   "aircanopy": "0.1.0",
   "jax": "0.11.2",
   "device": {
@@ -15,46 +15,86 @@
     {
       "lattice": "D3Q19",
       "dtype": "float32",
+      "collision": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 3.132,
-      "mlups": 16.74,
-      "first_call_seconds": 2.35,
+      "seconds": 3.802,
+      "mlups": 13.79,
+      "first_call_seconds": 2.77,
       "population_bytes_per_cell": 76,
-      "finite": true
+      "finite": true,
+      "copy_seconds": 0.0026,
+      "step_seconds": 0.01901
     },
     {
       "lattice": "D3Q19",
       "dtype": "float64",
+      "collision": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 6.959,
-      "mlups": 7.53,
-      "first_call_seconds": 2.51,
+      "seconds": 7.511,
+      "mlups": 6.98,
+      "first_call_seconds": 3.32,
       "population_bytes_per_cell": 152,
-      "finite": true
+      "finite": true,
+      "copy_seconds": 0.01598,
+      "step_seconds": 0.03755
     },
     {
       "lattice": "D3Q27",
       "dtype": "float32",
+      "collision": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 4.595,
-      "mlups": 11.41,
-      "first_call_seconds": 3.94,
+      "seconds": 5.049,
+      "mlups": 10.38,
+      "first_call_seconds": 4.43,
       "population_bytes_per_cell": 108,
-      "finite": true
+      "finite": true,
+      "copy_seconds": 0.00326,
+      "step_seconds": 0.02525
     },
     {
       "lattice": "D3Q27",
       "dtype": "float64",
+      "collision": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 9.541,
-      "mlups": 5.5,
-      "first_call_seconds": 3.68,
+      "seconds": 10.333,
+      "mlups": 5.07,
+      "first_call_seconds": 5.14,
       "population_bytes_per_cell": 216,
-      "finite": true
+      "finite": true,
+      "copy_seconds": 0.04157,
+      "step_seconds": 0.05167
+    },
+    {
+      "lattice": "D3Q19",
+      "dtype": "float32",
+      "collision": "direct",
+      "cells": 262144,
+      "steps": 200,
+      "seconds": 8.063,
+      "mlups": 6.5,
+      "first_call_seconds": 5.64,
+      "population_bytes_per_cell": 76,
+      "finite": true,
+      "copy_seconds": 0.00358,
+      "step_seconds": 0.04032
+    },
+    {
+      "lattice": "D3Q19",
+      "dtype": "float64",
+      "collision": "direct",
+      "cells": 262144,
+      "steps": 200,
+      "seconds": 17.152,
+      "mlups": 3.06,
+      "first_call_seconds": 5.9,
+      "population_bytes_per_cell": 152,
+      "finite": true,
+      "copy_seconds": 0.01679,
+      "step_seconds": 0.08576
     }
   ]
 }

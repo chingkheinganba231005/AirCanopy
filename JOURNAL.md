@@ -253,17 +253,18 @@ P1 is done: its exit check is met (Step 9).
 
 *The core*
 
-- [ ] Velocity sets D3Q19 and D3Q27, checked against the conditions their weights must satisfy
-- [ ] Units: physical to lattice and back, with the checks above
-- [ ] The 3D step, ported from the 2D one: equilibrium, streaming by shifts, regularised collision, Smagorinsky, Guo forcing; NumPy and JAX agree
-- [ ] Walls: halfway bounce-back on solid voxels; free-slip; periodic sides
+- [x] Velocity sets D3Q19 and D3Q27, checked against the conditions their weights must satisfy (Step 10)
+- [x] Units: physical to lattice and back, with the checks above
+- [x] The 3D step, ported from the 2D one: equilibrium, streaming by shifts, regularised collision, Smagorinsky, Guo forcing; NumPy and JAX agree
+- [x] Walls: halfway bounce-back on solid voxels; free-slip; periodic sides
 
 *Tests with exact answers*
 
-- [ ] A decaying shear wave decays at the rate its viscosity predicts
-- [ ] Poiseuille flow between two plates: the exact parabola, with errors falling at second order as the grid is refined
-- [ ] The Taylor–Green vortex: its exact decay at low Reynolds number; at Reynolds number 1600, its turbulent decay against the reference simulations (Brachet et al. 1983)
-- [ ] Speed on the container's processor (cell updates per second): D3Q19 against D3Q27, 32-bit against 64-bit numbers; choose the lattice
+- [x] A decaying shear wave decays at the rate its viscosity predicts
+- [x] Poiseuille flow between two plates: the exact parabola, with errors falling at second order as the grid is refined
+- [x] The Taylor–Green vortex: its exact decay at low Reynolds number (order criterion failed at the planned speed, met at lower speeds; Step 10)
+- [ ] The Taylor–Green vortex at Reynolds number 1600: its turbulent decay against the reference simulations (Brachet et al. 1983)
+- [x] Speed on the container's processor (cell updates per second): D3Q19 against D3Q27, 32-bit against 64-bit numbers; D3Q19 for now (D-016)
 
 *Real scale*
 
@@ -274,7 +275,7 @@ P1 is done: its exit check is met (Step 9).
 
 *Validation, and a first real run on a graphics card*
 
-- [ ] Flow around a cube on the floor of a channel, against wind-tunnel measurements (Martinuzzi and Tropea 1993; Hussein and Martinuzzi 1996), with the pass criteria written down from the papers before the run
+- [ ] Flow around a cube on the floor of a channel, against wind-tunnel measurements (Martinuzzi and Tropea 1993; Hussein and Martinuzzi 1996), with the pass criteria written down from the papers before the run, at two speeds (to measure the effect of the Mach number, Step 10)
 - [ ] A Colab notebook that runs the large cases on a graphics card and records what it ran; speed on the graphics card
 - [ ] Wind through the HKU site from one direction: mean wind speed 1.5 m above the ground, and streamlines, in the viewer, labelled *simulated*
 - [ ] Phase review
@@ -869,6 +870,89 @@ What is wrong or uncertain:
 
 **Next.** Phase P2: the 3D wind solver. Its plan and checklist come first, in Part 4.
 
+### 2026-10-23 · Step 10 · A 3D wind solver, checked against exact answers
+
+**Goal.** Start phase P2. Write the 3D lattice Boltzmann step and check it against flows whose answers are known exactly, before it touches a real place. The pass criteria were written down before the first run:
+
+- *shear wave*: the measured viscosity within 1 % at 32 cells per wavelength, and errors falling at second order (observed order at least 1.8 over 16, 32 and 64 cells);
+- *Poiseuille flow*: error below 1 % with 16 cells across the channel, order at least 1.8 over 8, 16 and 32 cells;
+- *Taylor–Green vortex*: velocity error below 1 % at 32 cells per period when its speed has halved, order at least 1.8 over 16, 32 and 64 cells.
+
+![The D3Q19 and D3Q27 velocity sets drawn as arrows from the centre of a cell](docs/images/wind_lattices.png)
+
+*The two velocity sets. Each cell holds packets of air moving in these directions: towards the 6 faces of the cell (blue), the 12 edges (orange) and, for D3Q27 only, the 8 corners (violet), plus one packet at rest.*
+
+
+**What we did.**
+
+1. JAX 0.11.2 joins the project (0.12 was four days old, D-009).
+2. `wind/lattice.py` builds both velocity sets from their rules, with their weights; tests check the conditions the weights must meet ([6.4](#64-the-lattice-boltzmann-method)).
+3. `wind/units.py` converts metres and seconds to lattice units and back. The time step is chosen so that the fastest wind moves 0.1 cells per step (A-009).
+4. `wind/lbm.py` is the step, ported from the 2D solver of Trees vs Breath to 3D, and written once for NumPy and JAX:
+   1. *stream*: packets move to the neighbouring cell; a packet that would enter a building bounces back;
+   2. *measure*: density and velocity from the packets;
+   3. *relaxation time*: from the viscosity, raised by the Smagorinsky turbulence model where the air is sheared;
+   4. *collide*: the packets are rebuilt from the equilibrium and the shear stress alone (the regularised collision), plus the push of any body force.
+5. `wind/solver.py` runs the step: with NumPy for checking, or compiled with JAX for speed. `set_flow` starts a flow with the stress its velocity carries, so it does not ring with sound.
+6. `wind/cases.py` and `benchmarks/wind_exact.py` run the three test flows on three grids each, for both velocity sets and two collisions: regularised, and the plain "BGK" one kept for comparison.
+7. `benchmarks/wind_speed.py` measures the speed.
+8. 45 new tests (148 in total).
+
+**The results** (`results/wind_exact.json`; D3Q19, regularised collision; D3Q27 gives the same numbers to three digits):
+
+| Flow | Error at the size the criterion names | Observed orders | Criteria met? |
+| --- | --- | --- | --- |
+| Shear wave | 0.051 % at 32 cells | 2.01, 2.00 | yes |
+| Poiseuille flow | 0.107 % at 16 cells | 2.00, 2.00 | yes |
+| Taylor–Green vortex, planned speed | 0.042 % at 32 cells | 2.88, 1.16 | **no**: the order falls below 1.8 |
+| Taylor–Green vortex, 4 times slower | 0.030 % | 2.39, 1.90 | yes |
+| Taylor–Green vortex, 16 times slower | 0.029 % | 2.30, 2.08 | yes |
+
+![Error against grid size for the three test flows, on log-log axes, with a line of slope -2](docs/images/wind_convergence.png)
+
+*Errors against grid size. On these axes, second order is a straight line of slope −2 (dashed): each time the cells are halved, the error falls to a quarter. The shear wave and Poiseuille flow follow it exactly. The Taylor–Green vortex at the planned speed bends away between 32 and 64 cells; 16 times slower, it follows the line.*
+
+
+The plain BGK collision passes the same criteria, but its errors are two to four times larger: 0.21 % for the shear wave at 32 cells and 0.28 % for Poiseuille flow at 16 cells. So the regularised collision is both more stable and, here, more accurate.
+
+**Why the Taylor–Green criterion failed, and what that teaches.** The exact solution is for an *incompressible* fluid, one whose density never changes. The lattice Boltzmann method simulates a gas that can be squeezed a little. As the vortices slow down, their pressure falls, and a squeezable gas needs a tiny flow in and out to change its density along with it. That flow is not in the exact solution, so it shows up as "error". It sits exactly where the vortices' pressure lives, at twice their wavenumber (the picture below), and its size scales with the Mach number. A rough estimate of the extra flow, ν k U / (2 c_s²) as a share of the speed U, gives 1.5 × 10⁻⁴ for 64 cells at the planned speed (ν = 0.1, k = 2π/64, U = 0.01, c_s² = 1/3): close to the 1.9 × 10⁻⁴ measured. At the planned speed it was larger than the error of the grid itself, so it spoiled the measurement of the order. Slowing the vortices down shrank it, and the order came back to 2. The criterion is recorded as failed at the planned speed; nothing was retuned to make it pass.
+
+![Taylor-Green vortex speed field and the error field left at the half-decay time](docs/images/wind_taylor_green.png)
+
+*Left: the vortices' speed when it has halved, 64 cells per period. Right: the error that is left, under 0.01 % of the starting speed. It forms a pattern with half the vortices' spacing, the signature of their pressure field, and not of the grid.*
+
+
+This matters for real runs. A-009 lets the fastest wind move 0.1 cells per step, a Mach number of 0.17, and the gas's compressibility errors grow with the square of the Mach number. The cube validation will therefore be run at two speeds, to measure how much this changes the answer.
+
+**Speed** (`results/wind_speed_cpu.json`; a 64 × 64 × 64 box with ground, a block, a free-slip top, a body force and the turbulence model; the container's 4 processor cores):
+
+| | 32-bit numbers | 64-bit numbers | Memory for the packets, per cell |
+| --- | --- | --- | --- |
+| D3Q19 | 13.8 million cell updates per second | 7.0 | 76 bytes (32-bit) |
+| D3Q27 | 10.4 | 5.1 | 108 bytes (32-bit) |
+
+Timings on this shared machine vary: two runs an hour apart gave 16.7 and 13.8 million for D3Q19 in 32-bit (the first is in the git history of the same file).
+
+D3Q27 gave the same accuracy in all three tests and is a third to a half slower, so D3Q19 is the default for now (D-016). The two will be compared again in turbulent flows, where the literature reports that the choice of velocity set matters (White and Chong 2011). At this speed, one step on the 32.9 million cells of the Mong Kok grid would take about 2.4 seconds, and an hour of wind (90 000 steps of 0.04 s on 2 m cells) about two and a half days: the real runs need a graphics card.
+
+**What to understand.**
+
+- *Exact solutions.* A few flows have answers that can be written down: a shear wave decaying, flow between plates, a grid of vortices. Each tests something different: the viscosity alone; walls; the nonlinear motion of the air and its pressure. If a solver fails one, the failure points to the part that is wrong.
+- *Order of convergence.* If halving the cells divides the error by 4 = 2², the method is "second order". On log-log axes the error then falls along a line of slope −2. Measuring the order is a stronger check than one small error: a bug often gives a small error on one grid and the wrong order across grids.
+- *Weak compressibility and the Mach number.* See [6.14](#614-a-slightly-squeezable-gas-the-mach-number).
+- *Moments.* At every cell, everything the collision needs is 10 numbers: the density, the 3 components of momentum and the 6 of the momentum flux. The packets can be turned into these and back with two small matrix products, which computers do very fast. That made the step about twice as fast (2.1 times in 32-bit numbers, 2.3 times in 64-bit), with results identical to 1 part in 10¹⁵.
+
+**Problems and fixes.**
+
+1. *A sign from a textbook.* The vortices' pressure is often written p = −ρU²(cos 2kx + cos 2ky)/4. That formula belongs to vortices shifted by a quarter period; for the form we used, working it out from the equations of motion gives a plus sign. With the wrong sign, the test started with a pressure field that pushed against the vortices, and a sound wave twice the size of the real pressure ran through the box. Derived again by hand, then fixed.
+2. *A start that rings.* A flow started from pure equilibrium has no viscous stress. In the first steps, momentum diffused at the wrong rate and sound waves started. `set_flow` now adds the stress the velocity gradients imply (Skordos 1993), and can let the density settle while the velocity is held (Mei et al. 2006).
+3. *A failed criterion.* See above; recorded, explained, not hidden.
+4. *A 32-bit run that was secretly 64-bit.* With 64-bit numbers switched on in JAX, the lattice weights, stored as NumPy 64-bit numbers, quietly turned every 32-bit run into a 64-bit one. That is why 32-bit was no faster at first. The weights are now plain Python numbers, which JAX lets adapt to the array, and a test checks that a 32-bit run stays 32-bit.
+5. *A slow collision.* Written direction by direction and in 64-bit numbers, which is what the first measurement had silently used, a step on the 64³ box took 86 ms: 3.1 million cell updates per second. The moment form, the fix of item 4 and one flat matrix product instead of `einsum` bring it to 13.8 million (19 ms a step, in 32-bit). That is still about 7 times the time it takes just to read and write all the packets once (2.6 ms), so there is room left; the graphics card will show how much of it matters.
+6. *Packages that were too new.* Pillow 13.0, a week old, had slipped into the lock earlier today with scikit-image, and five other packages were also under two weeks old. The project now tells uv to ignore every release published after a fixed date (`exclude-newer` in `pyproject.toml`, D-017), so the rule is applied by the tool, not by memory. vitest 5.0.5, eight days old, stays: it was taken to fix a failing install, the exception D-009 allows.
+
+**Next.** The 3D Taylor–Green vortex at Reynolds number 1600, the first test with real turbulence, which needs a graphics card at full size; then open boundaries, the wall model and the atmospheric boundary layer.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -942,6 +1026,23 @@ Satellites see trees from above: a crown is a bright, textured blob, and its sha
 
 A *geocoder* turns a name or an address into coordinates (*reverse geocoding* turns coordinates into an address). It keeps a large index of named places, such as every named feature in OpenStreetMap, finds the ones whose names match what you typed, and ranks them. The first answer is the geocoder's best guess, not a fact: many places share a name, and a name typed slightly differently can match something else entirely. That is why AirCanopy shows all the candidates and asks you to pick when the first is wrong.
 
+### 6.13 Checking a solver against exact answers
+
+A simulation can be wrong in ways that look perfectly reasonable. So before trusting it, we give it problems whose answers are known exactly, and check two things:
+
+1. *The error is small* on a reasonable grid.
+2. *The error shrinks at the promised rate* as the grid gets finer. The lattice Boltzmann method is *second order*: halving the cell size should divide the error by about 4. Plotted on log-log axes (both scales logarithmic), the error then falls along a straight line of slope −2.
+
+The second check is the stronger one. A bug often still gives a small error on one grid, but it rarely gives the right rate across three grids. When the rate is wrong, something else is mixed into the error, and finding out what it is teaches you about the method, as the Taylor–Green test did in Step 10.
+
+### 6.14 A slightly squeezable gas: the Mach number
+
+Air in a street behaves almost as if it could not be squeezed: its density changes by a tiny fraction as it speeds up and slows down. The equations for such *incompressible* flow have no speed of sound; pressure adjusts instantly everywhere.
+
+The lattice Boltzmann method simulates a real gas instead, with a speed of sound, c_s = √(1/3) cells per step on the lattice. It behaves like an incompressible fluid only when the flow is much slower than that. The ratio of the flow speed to the speed of sound is the *Mach number*, Ma = u / c_s. The difference between the lattice gas and an incompressible fluid grows with Ma²: halve the speed, and the difference falls to a quarter.
+
+In the real atmosphere a breeze moves at a tiny fraction of the speed of sound, so real air in a street is very nearly incompressible. On the lattice we let the wind go relatively much faster, up to Ma 0.17 (A-009), because a faster lattice speed means a longer time step and fewer steps to simulate. The price is a small compressibility error that real air does not have. Step 10 measured it in a simple flow, and the cube test will measure it in a city-like one.
+
 (More lessons follow as the project reaches them: wall models, trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---
@@ -964,6 +1065,8 @@ A *geocoder* turns a name or an address into coordinates (*reverse geocoding* tu
 | D-013 | A place found by name is never used silently: every candidate is listed, the one used is marked, and the name typed, the pick and the place are stored with the site | Names are ambiguous: "University of Hong Kong" found a restaurant in Germany. A silent wrong pick would build the wrong place |
 | D-014 | Storeys are counted from the ground, as the OpenStreetMap wiki defines `building:levels`, also for towers tagged with the undocumented `location=podium`; the site review counts those towers | The documented rule is the only one others can check; counting the cases shows how much depends on it |
 | D-015 | The wind solver is our own, in JAX, ported piece by piece from the tested 2D solver of Trees vs Breath; existing libraries such as XLB are used only to compare results and speed | The later phases put their own physics inside the same step (porous crowns, wall models, pollutants, heat and buoyancy); a step written once for NumPy and JAX can be checked line by line; and the owner wants to learn how a solver works |
+| D-016 | The wind solver uses D3Q19 by default; D3Q27 stays available and is compared again in turbulent flows | In the three exact tests D3Q27 was no more accurate and was a third to a half slower; the literature reports that the choice matters in turbulent flows (White and Chong 2011), so the question stays open until those tests |
+| D-017 | D-009 is applied by the tool: uv ignores every release published after the date in `pyproject.toml` (`exclude-newer`), which is moved forward on purpose; npm packages are checked by script | A rule kept by memory failed: Pillow 13.0, a week old, came in unnoticed with another package |
 | D-009 | Every package version is pinned exactly, and new versions are taken only after they have been out for about two weeks, unless a fix is needed | A build that worked keeps working; very new releases are where most broken or malicious packages are caught |
 
 ---
