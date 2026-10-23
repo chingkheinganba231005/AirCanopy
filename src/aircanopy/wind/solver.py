@@ -106,7 +106,8 @@ class Solver:
         g = self.params.g
         if g is not None:
             u = tuple(np.asarray(u[a]) + 0.5 * g[a] for a in range(3))
-        self.f = lbm.equilibrium(xp, self.lat, as_x(rho), tuple(as_x(c) for c in u))
+        f = lbm.equilibrium(xp, self.lat, as_x(rho), tuple(as_x(c) for c in u))
+        self.f = xp.asarray(f, dtype=self.dtype)
 
     def set_flow(
         self, rho, u, settle: bool = False, tolerance: float = 1e-12, max_steps: int = 50_000

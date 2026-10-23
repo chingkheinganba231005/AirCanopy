@@ -21,7 +21,7 @@ moving in direction c_i. One step:
    with P the non-equilibrium momentum flux sum_i c_i c_i (f_i - f_eq_i), corrected for the
    force. This is the exact solution of nu = nu0 + Cs^2 |S| when the strain rate is read from
    the packets themselves, S = -P / (2 rho c_s^2 tau), so no finite differences are needed
-   (Hou et al. 1996).
+   (Hou et al. 1994).
 4. *Collision*, regularised (Latt and Chopard 2006): the packets are rebuilt from the
    equilibrium and the trace-free part P_d of P alone,
        f_post_i = f_eq_i + (1 - 1/tau) w_i (9/2) c_i c_i : P_d + S_i / 2,
@@ -35,9 +35,12 @@ Solid cells keep the values streamed into them; no fluid cell ever reads them.
 
 from __future__ import annotations
 
+import functools
 import math
 
-from .lattice import VelocitySet
+import numpy as np
+
+from .lattice import CS2, VelocitySet
 
 SMAG = 18.0 * math.sqrt(2.0)  # 2 sqrt(2) / c_s^4, with c_s^2 = 1/3
 #: Components of a symmetric 3 x 3 tensor, in the order they are stored.
@@ -73,9 +76,9 @@ def equilibrium(xp, lat: VelocitySet, rho, u):
     for i in range(lat.q):
         cu = _dot(lat.c[i], u)
         if cu is None:
-            out.append(lat.w[i] * rho * (1.0 - usq))
+            out.append(float(lat.w[i]) * rho * (1.0 - usq))
         else:
-            out.append(lat.w[i] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - usq))
+            out.append(float(lat.w[i]) * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - usq))
     return xp.stack(out)
 
 
@@ -132,7 +135,7 @@ def regularised_neq(xp, lat: VelocitySet, p):
                 (2 * cy * cz, pyz),
             ]
         )
-        out.append(0.0 * pxx if term is None else (4.5 * lat.w[i]) * term)
+        out.append(0.0 * pxx if term is None else (4.5 * float(lat.w[i])) * term)
     return xp.stack(out)
 
 
@@ -153,7 +156,7 @@ def guo_source(xp, lat: VelocitySet, pre, u, force):
                 factor = factor + 9.0 * int(c[a]) * cu
             term = factor * force[a]
             total = term if total is None else total + term
-        out.append(pre * lat.w[i] * total)
+        out.append(pre * float(lat.w[i]) * total)
     return xp.stack(out)
 
 
@@ -206,7 +209,73 @@ def collide(xp, lat: VelocitySet, f, cfg, regularised: bool = True, forced: bool
     return xp.where(cfg["fluid"], post, f)
 
 
+@functools.cache
+def moment_matrices(lat: VelocitySet) -> tuple[np.ndarray, np.ndarray]:
+    """M (10, Q) takes the packets to the moments rho, rho u (3) and sum f c c (6, in PAIRS
+    order); H (Q, 10) builds packets back from a set of those moments:
+
+        f_i = w_i [A0 + c_i . A1 / c_s^2 + (c_i c_i - c_s^2 I) : A2 / (2 c_s^4)],
+
+    the expansion of the packets in Hermite polynomials up to second order. The equilibrium,
+    the regularised non-equilibrium part and the Guo source are all of this form.
+    """
+    c = lat.c.astype(float)
+    rows = [np.ones(lat.q), c[:, 0], c[:, 1], c[:, 2]]
+    rows += [c[:, a] * c[:, b] for a, b in PAIRS]
+    m = np.array(rows)
+    cols = [np.ones(lat.q), 3.0 * c[:, 0], 3.0 * c[:, 1], 3.0 * c[:, 2]]
+    cols += [4.5 * (c[:, a] * c[:, b] - (CS2 if a == b else 0.0)) * (1 if a == b else 2)
+             for a, b in PAIRS]  # fmt: skip
+    h = lat.w[:, None] * np.array(cols).T
+    return m, h
+
+
+def collide_moments(xp, lat: VelocitySet, f, cfg, regularised: bool = True, forced: bool = False):
+    """The same collision as `collide`, through the 10 moments: f -> M f -> H A.
+
+    Two small matrix products per cell replace the sums over directions, which processors and
+    graphics cards do much faster. The result is the same to round-off (tests/test_wind_step.py).
+    """
+    m_mat, h_mat = moment_matrices(lat)
+    cells = f.shape[1:]
+    # One flat matrix product over all cells: twice as fast as einsum on a processor.
+    m = (xp.asarray(m_mat, dtype=f.dtype) @ f.reshape(lat.q, -1)).reshape(10, *cells)
+    rho = m[0]
+    g = cfg["g"]
+    u = [m[1 + a] / rho + (0.5 * g[a] if forced else 0.0) for a in range(3)]
+    force = [rho * g[a] for a in range(3)] if forced else None
+    p, uu, uf = [], [], []
+    for k, (a, b) in enumerate(PAIRS):
+        uu.append(rho * u[a] * u[b])
+        pk = m[4 + k] - uu[k] - (rho * CS2 if a == b else 0.0)
+        if forced:
+            uf.append(force[a] * u[b] + force[b] * u[a])
+            pk = pk + 0.5 * uf[k]
+        p.append(pk)
+    tau = smagorinsky_tau(xp, p, rho, cfg["tau0"], cfg["cs"])
+    h = xp.asarray(h_mat, dtype=f.dtype)
+
+    def build(moments):
+        return (h @ xp.stack(moments).reshape(10, -1)).reshape(lat.q, *cells)
+
+    if regularised:
+        omega = 1.0 - 1.0 / tau
+        third = (p[0] + p[1] + p[2]) / 3.0
+        a1 = [rho * u[a] + (0.5 * force[a] if forced else 0.0) for a in range(3)]
+        a2 = []
+        for k in range(6):
+            pd = p[k] - third if k < 3 else p[k]
+            a2.append(uu[k] + omega * pd + (0.5 * uf[k] if forced else 0.0))
+        post = build([rho, *a1, *a2])
+    else:
+        inv, pre = 1.0 / tau, 1.0 - 0.5 / tau
+        b1 = [rho * u[a] * inv + (pre * force[a] if forced else 0.0) for a in range(3)]
+        b2 = [uu[k] * inv + (pre * uf[k] if forced else 0.0) for k in range(6)]
+        post = (1.0 - inv) * f + build([rho * inv, *b1, *b2])
+    return xp.where(cfg["fluid"], post, f)
+
+
 def step(xp, lat: VelocitySet, f_post, cfg, regularised=True, free_slip_top=False, forced=False):
     """One time step: stream, then collide. Takes and returns post-collision populations."""
     f = stream(xp, lat, f_post, cfg["solid"], free_slip_top)
-    return collide(xp, lat, f, cfg, regularised, forced)
+    return collide_moments(xp, lat, f, cfg, regularised, forced)

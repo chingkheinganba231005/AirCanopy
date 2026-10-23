@@ -285,7 +285,7 @@ P1 is done: its exit check is met (Step 9).
 
 - Krüger, Kusumaatmaja, Kuzmin, Shardt, Silva and Viggen 2017, *The Lattice Boltzmann Method: Principles and Practice* (Springer): velocity sets, units, boundaries, forcing.
 - Latt and Chopard 2006 (regularised collision); Malaspinas 2015 (recursive regularisation); Geier, Schönherr, Pasquali and Krafczyk 2015 (cumulant collision).
-- Hou, Sterling, Chen and Doolen 1996 (Smagorinsky model in lattice Boltzmann); Nicoud and Ducros 1999 (the WALE model).
+- Hou, Sterling, Chen and Doolen 1994, arXiv comp-gas/9401004 (Smagorinsky model in lattice Boltzmann); Nicoud and Ducros 1999 (the WALE model).
 - Malaspinas and Sagaut 2014 (a wall model for lattice Boltzmann large-eddy simulation).
 - Brachet et al. 1983 (Taylor–Green vortex); Kraichnan 1967 (turbulence in two dimensions).
 - Martinuzzi and Tropea 1993; Hussein and Martinuzzi 1996 (flow around a cube).

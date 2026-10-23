@@ -169,3 +169,31 @@ def test_numpy_and_jax_agree(lat):
         s.run(15)
         out.append(np.asarray(s.f))
     assert np.abs(out[0] - out[1]).max() < 1e-13
+
+
+@pytest.mark.parametrize("lat", LATS, ids=ids)
+@pytest.mark.parametrize("regularised", [True, False])
+@pytest.mark.parametrize("forced", [True, False])
+def test_the_collision_through_moments_is_the_same_collision(lat, regularised, forced):
+    shape = (4, 5, 6)
+    solid = np.zeros(shape, bool)
+    solid[0, 1:3, 2] = True
+    rng = np.random.default_rng(7)
+    f = lbm.equilibrium(np, lat, *perturbed(shape, seed=8))
+    f = f * (1.0 + 0.01 * rng.standard_normal(f.shape))  # some non-equilibrium content
+    cfg = {"solid": solid, "fluid": ~solid, "tau0": 0.52, "cs": 0.17, "g": (1e-5, -2e-6, 3e-6)}
+    direct = lbm.collide(np, lat, f, cfg, regularised, forced)
+    moments = lbm.collide_moments(np, lat, f, cfg, regularised, forced)
+    assert np.abs(direct - moments).max() < 1e-15
+
+
+def test_a_float32_run_stays_float32_with_64_bit_enabled():
+    # NumPy's float64 scalars are not "weakly typed" in JAX: one of them in the step would
+    # silently turn a float32 run into a float64 run (it did: the lattice weights).
+    solid = np.zeros((4, 4, 4), bool)
+    solid[0] = True
+    s = Solver(D3Q19, solid, Params(tau0=0.6, smagorinsky=0.1, g=(1e-6, 0, 0)), "jax", np.float32)
+    s.set_flow(*perturbed((4, 4, 4), seed=9))
+    assert s.f.dtype == np.float32
+    s.run(3)
+    assert s.f.dtype == np.float32
