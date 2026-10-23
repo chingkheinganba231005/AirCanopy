@@ -142,3 +142,109 @@ def test_floor_friction_balances_the_push_of_the_wind(lat, collision):
         previous = ux[1].mean()
     assert ux[1].mean() == pytest.approx(expected, rel=1e-6)
     assert np.all(np.diff(ux[1:, 0, 0]) > 0)  # faster with height, as in a boundary layer
+
+
+def test_matched_floor_drag_splits_deep_and_shallow_floors():
+    solid = np.zeros((7, 3, 4), bool)
+    solid[0] = True
+    solid[1:5, 1, 2] = True  # a block 4 cells tall: on its top, 2 cells of air remain
+    local, matched = walls.matched_floor_drag(solid, 0.05, cells_up=3)
+    floors = walls.floor_cells(solid)
+    assert matched[1].sum() > 0 and (matched[1][floors[1]] > 0).all()
+    assert local[5, 1, 2] == 2 * walls.drag_coefficient(0.05)  # too shallow: first-cell model
+    assert matched[5, 1, 2] == 0
+    assert set(np.unique(matched)) == {0.0, 2 * walls.drag_coefficient(0.05, height=3.5)}
+    assert ((local > 0) & (matched > 0)).sum() == 0 and (
+        (local > 0) | (matched > 0)
+    ).sum() == floors.sum()
+    with pytest.raises(ValueError, match="at least 1"):
+        walls.matched_floor_drag(solid, 0.05, cells_up=0)
+
+
+@pytest.mark.parametrize(("lat", "collision"), PAIRS, ids=pair_ids)
+def test_matched_drag_is_the_same_through_moments(lat, collision):
+    shape = (6, 4, 5)
+    rng = np.random.default_rng(14)
+    rho = 1 + 0.01 * rng.standard_normal(shape)
+    u = tuple(0.03 * rng.standard_normal(shape) for _ in range(3))
+    f = lbm.equilibrium(np, lat, rho, u) * (1 + 0.01 * rng.standard_normal((lat.q, *shape)))
+    solid = np.zeros(shape, bool)
+    match_drag = np.zeros(shape)
+    match_drag[1] = 0.5 * rng.random(shape[1:])
+    cfg = {"solid": solid, "fluid": ~solid, "tau0": 0.52, "cs": 0.17, "g": (1e-5, 0.0, 2e-6),
+           "drag": 0.0, "match_drag": match_drag}  # fmt: skip
+    for forced in (True, False):
+        direct = lbm.collide(np, lat, f, cfg, collision, forced, matched=2)
+        moments = lbm.collide_moments(np, lat, f, cfg, collision, forced, matched=2)
+        assert np.abs(direct - moments).max() < (1e-14 if collision == "recursive" else 1e-15)
+        # The force pulls the first layer against the wind two cells above, and nothing else.
+        plain = lbm.collide_moments(np, lat, f, {**cfg, "match_drag": 0 * match_drag}, collision,
+                                    forced)  # fmt: skip
+        changed = np.abs(moments - plain).max(axis=(0, 2, 3))
+        assert changed[1] > 1e-6 and np.all(changed[[0, 2, 3, 4, 5]] < 1e-15)
+
+
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_the_velocity_read_back_with_matched_drag_is_the_one_set(lat, collision):
+    shape = (6, 3, 4)
+    solid = np.zeros(shape, bool)
+    solid[0] = True
+    _, match_drag = walls.matched_floor_drag(solid, 0.05, cells_up=2)
+    params = Params(tau0=0.7, g=(1e-5, 0, 0), collision=collision, match_cells=2)
+    s = Solver(lat, solid, params, "numpy", np.float64, match_drag=match_drag)
+    rng = np.random.default_rng(15)
+    rho = 1 + 0.01 * rng.standard_normal(shape)
+    u = tuple(0.05 * rng.standard_normal(shape) for _ in range(3))
+    s.set_equilibrium(rho, u)
+    rho_back, u_back = s.fields()
+    air = ~solid
+    assert np.abs(rho_back - rho)[air].max() < 1e-14
+    assert max(np.abs(u_back[k] - u[k])[air].max() for k in range(3)) < 1e-14
+    with pytest.raises(ValueError, match="go together"):
+        Solver(lat, solid, Params(tau0=0.7, collision=collision), "numpy", match_drag=match_drag)
+
+
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_matched_floor_friction_balances_the_push_of_the_wind(lat, collision):
+    """As the first-cell test, with the stress driven by the wind k cells up: in the steady
+    channel lambda_m / 2 U_k^2 = g h, so the wind at the matching cell is sqrt(2 g h / lambda_m)."""
+    h, k = 8, 3
+    solid = np.zeros((h + 1, 2, 2), bool)
+    solid[0] = True
+    z0, g = 0.05, 2e-6
+    local, match_drag = walls.matched_floor_drag(solid, z0, cells_up=k)
+    assert not local.any()
+    params = Params(tau0=0.8, g=(g, 0, 0), free_slip_top=True, slip_floors=True,
+                    collision=collision, match_cells=k)  # fmt: skip
+    s = Solver(lat, solid, params, "jax", np.float64, match_drag=match_drag)
+    lam = 2 * walls.drag_coefficient(z0, height=k + 0.5)
+    expected = math.sqrt(2 * g * h / lam)
+    s.set_equilibrium(np.ones(solid.shape), (np.full(solid.shape, expected), 0 * solid, 0 * solid))
+    previous = 0.0
+    for _ in range(100):
+        s.run(5000)
+        _, (ux, _, _) = s.fields()
+        if abs(ux[1 + k].mean() - previous) < 1e-12:
+            break
+        previous = ux[1 + k].mean()
+    assert ux[1 + k].mean() == pytest.approx(expected, rel=1e-6)
+
+
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_numpy_and_jax_agree_with_matched_drag(lat, collision):
+    shape = (7, 4, 5)
+    solid = np.zeros(shape, bool)
+    solid[0] = True
+    _, match_drag = walls.matched_floor_drag(solid, 0.05, cells_up=2)
+    params = Params(tau0=0.51, smagorinsky=0.15, g=(1e-5, 0.0, 0.0), free_slip_top=True,
+                    slip_floors=True, collision=collision, match_cells=2)  # fmt: skip
+    rng = np.random.default_rng(16)
+    rho0 = 1 + 0.01 * rng.standard_normal(shape)
+    u0 = tuple(0.02 * rng.standard_normal(shape) for _ in range(3))
+    out = []
+    for backend in ("numpy", "jax"):
+        s = Solver(lat, solid, params, backend, np.float64, match_drag=match_drag)
+        s.set_equilibrium(rho0, u0)
+        s.run(12)
+        out.append(np.asarray(s.f))
+    assert np.abs(out[0] - out[1]).max() < 1e-13

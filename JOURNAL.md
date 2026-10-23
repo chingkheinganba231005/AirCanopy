@@ -1140,6 +1140,20 @@ U(z) = (u*/κ) ln(z/z0)
 
 On a graph with height on a logarithmic scale, the rule is a straight line: every tenfold increase in height adds the same amount to the wind, ln(10) u*/κ ≈ 5.8 u*. A *wall model* uses the rule backwards: from the wind in the first cell of the grid, it works out the friction the ground must exert, so the grid does not need to resolve the thin layer where the wind actually reaches zero.
 
+### 6.16 When an error feeds itself: numerical stability
+
+A simulation makes small errors at every step: rounding in the last digits, and the grid's own approximations. Usually they stay small, because the method damps them the way friction damps a swing. A method is *unstable* when some pattern of error is amplified a little at every step instead. It then grows exponentially, like interest on a debt, until it swamps the answer or the numbers overflow (the computer's "NaN", not a number). The patterns at risk are usually the shortest the grid can hold, such as a wave that goes up in one cell and down in the next, because that is where the method's approximations are worst.
+
+To test a method on its own, take a flow whose answer is known never to change, such as a uniform wind in a box that repeats in every direction. Add tiny random noise and watch it. If the noise grows, the method made it grow. Viscosity damps short waves, so the test is hardest with almost no viscosity, which is exactly the case of real air on cells a metre or more across.
+
+### 6.17 The collision step, three ways
+
+In each cell the collision nudges the packets towards a balanced mix, the *equilibrium*, which has the same density and velocity (6.4). What is left over, the *non-equilibrium* part, carries the friction inside the air (the stress). The three collisions in `wind/lbm.py` differ in what they keep of it:
+
+- **BGK** keeps all of it, shrunk by the same factor. That includes combinations of packets with no physical meaning (*ghost modes*), which nothing damps when the viscosity is tiny.
+- **Regularised** keeps only the part that carries stress and rebuilds the packets from it, so the ghost modes are gone. But its equilibrium is right only up to the square of the wind speed, and it drops everything of higher order. Step 12 shows that this is not enough at almost zero viscosity in a fast wind.
+- **Recursive regularised** also rebuilds the higher orders, from the stress and the velocity, the way the theory of how a gas relaxes (the Chapman–Enskog expansion) says they follow. Its equilibrium is right to higher order too. On D3Q27 both parts can be written as products of one factor per direction (x, y and z), which makes the code short and cheap to run.
+
 (More lessons follow as the project reaches them: trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---

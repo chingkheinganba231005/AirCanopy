@@ -10,9 +10,18 @@ Pass criteria, written down before the first full run (JOURNAL.md, Step 11):
    wall; large-eddy simulations with the Smagorinsky model are known to overshoot it near the
    ground (Mason and Thomson 1992; Brasseur and Wei 2010).
 
+The wall model fed from higher up (--match, Step 12), decided before its first run: the
+height it reads is h_wm = 0.2 delta (Larsson et al. 2016, Sec. 3.2), with delta = H, the depth
+of the boundary layer in this box. For H = 32 that is 6.4 cells, read at the nearest layer
+centre, 6.5 (--match 6); the cells are then 0.15 h_wm tall, finer than the 0.3 h_wm that Lee
+et al. (2013) needed in their code (as reported by Larsson et al.). One more run reads at 3.5
+(--match 3, cells 0.29 h_wm), to show how the answer depends on the height. They are judged
+by the same criteria 1 and 2.
+
     uv run python benchmarks/wind_abl.py --cs 0.1
     uv run python benchmarks/wind_abl.py --cs 0.17 --nx 64 --ny 32 --height 32
     uv run python benchmarks/wind_abl.py --cs 0.1 --lattice D3Q19     # the regularised collision
+    uv run python benchmarks/wind_abl.py --cs 0.17 --match 6          # wall model reads z = 6.5
 
 The default is D3Q27 with the recursive collision (Step 12). Adds the run to
 results/wind_abl_<device>.json, replacing an earlier run with the same settings; runs recorded
@@ -65,13 +74,16 @@ def main() -> None:
     parser.add_argument("--height", type=int, default=32)
     parser.add_argument("--z0", type=float, default=0.05)
     parser.add_argument("--cs", type=float, default=0.1)
+    # The wall model reads the wind this many cells above the first cell (0: the first cell).
+    parser.add_argument("--match", type=int, default=0)
     parser.add_argument("--spin-up", type=float, default=10.0)
     parser.add_argument("--average", type=float, default=10.0)
     args = parser.parse_args()
     collision = args.collision or ("recursive" if args.lattice == "D3Q27" else "regularised")
     start = time.perf_counter()
     run = boundary_layer.run(LATTICES[args.lattice], args.nx, args.ny, args.height, z0=args.z0,
-                             smagorinsky=args.cs, collision=collision, spin_up=args.spin_up,
+                             smagorinsky=args.cs, collision=collision, match_cells=args.match,
+                             spin_up=args.spin_up,
                              average=args.average)  # fmt: skip
     device = jax.devices()[0]
     run.update(
@@ -84,7 +96,8 @@ def main() -> None:
         average_turnovers=args.average,
         criteria=criteria(run),
     )
-    shown = ("lattice", "collision", "smagorinsky", "seconds", "floor_stress_over_push", "criteria")
+    shown = ("lattice", "collision", "match_cells", "smagorinsky", "seconds",
+             "floor_stress_over_push", "criteria")  # fmt: skip
     print({k: run[k] for k in shown})
     path = ROOT / "results" / f"wind_abl_{device.platform}.json"
     out = json.loads(path.read_text()) if path.is_file() else {
@@ -93,8 +106,9 @@ def main() -> None:
     }  # fmt: skip
 
     def key(r):
-        return (r["lattice"], r.get("collision", "regularised"), r["nx"], r["ny"], r["h"], r["z0"],
-                r["smagorinsky"], r["spin_up_turnovers"], r["average_turnovers"])  # fmt: skip
+        return (r["lattice"], r.get("collision", "regularised"), r.get("match_cells", 0), r["nx"],
+                r["ny"], r["h"], r["z0"], r["smagorinsky"], r["spin_up_turnovers"],
+                r["average_turnovers"])  # fmt: skip
 
     out["runs"] = [r for r in out["runs"] if key(r) != key(run)] + [run]
     path.write_text(json.dumps(out, indent=1) + "\n")

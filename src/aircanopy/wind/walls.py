@@ -15,6 +15,16 @@ slows to zero, cannot be resolved. A wall model stands in for it (assumption A-0
 
 The law of the wall describes the mean wind. Applying it to the wind of each moment is the
 simplest wall model for large-eddy simulation, the one to test first.
+
+The wind in the first cells above a wall is always the least accurate part of a large-eddy
+simulation, because the eddies that carry momentum there are smaller than the cells: "the LES
+is inevitably plagued by numerical and subgrid-modeling errors in the first few grid points
+off the wall" (Larsson et al. 2016, Sec. 3.2, after Kawai and Larsson 2012). Fed from the
+first cell, a wall model passes that error on, and the mean wind misses the law of the wall
+(the "log-layer mismatch"). Their remedy is to read the wind at a height h_wm chosen for the
+flow, not the grid, with cells small enough there. `matched_floor_drag` does this for floors:
+the stress rho C_d(h) |U(h)| U(h), with C_d(h) = (kappa / ln(h / z0))^2 and U(h) the wind
+`cells_up` cells above the first cell, at h = cells_up + 1/2, acts on the first cell.
 """
 
 from __future__ import annotations
@@ -32,12 +42,13 @@ KAPPA = 0.40
 Z1 = 0.5
 
 
-def drag_coefficient(z0, kappa: float = KAPPA):
-    """C_d = (kappa / ln(z1 / z0))^2 for a roughness length z0 in cells (0 < z0 < 1/2)."""
+def drag_coefficient(z0, kappa: float = KAPPA, height: float = Z1):
+    """C_d = (kappa / ln(height / z0))^2 for a roughness length z0 in cells (0 < z0 < 1/2) and
+    the height, in cells above the floor, of the wind it multiplies (the first cell's centre)."""
     z0 = np.asarray(z0, dtype=float)
     if np.any(z0 <= 0) or np.any(z0 >= Z1):
         raise ValueError(f"the roughness length must be between 0 and {Z1} cells")
-    return (kappa / np.log(Z1 / z0)) ** 2
+    return (kappa / np.log(height / z0)) ** 2
 
 
 def floor_cells(solid: np.ndarray) -> np.ndarray:
@@ -59,6 +70,30 @@ def rough_floor_drag(solid: np.ndarray, z0) -> np.ndarray:
     out = np.zeros(floors.shape)
     out[floors] = 2.0 * drag_coefficient(z0[floors])
     return out
+
+
+def matched_floor_drag(solid: np.ndarray, z0, cells_up: int) -> tuple[np.ndarray, np.ndarray]:
+    """The drag fields of a floor wall model fed from `cells_up` cells above the first cell.
+
+    Returns (local, matched): `matched` holds 2 C_d(h), h = cells_up + 1/2, in the floor cells
+    with at least cells_up more cells of air above them, for Solver(match_drag=...) with
+    Params(match_cells=cells_up); `local` holds the first-cell drag (rough_floor_drag) of the
+    other floor cells, where the air is too shallow, for Solver(drag=...).
+    """
+    if cells_up < 1:
+        raise ValueError("cells_up must be at least 1; 0 is the first-cell model")
+    solid = np.asarray(solid, dtype=bool)
+    floors = floor_cells(solid)
+    deep = floors.copy()
+    for k in range(1, cells_up + 1):
+        above = np.zeros_like(solid)
+        above[:-k] = ~solid[k:]  # the cell k above is air (and inside the box)
+        deep &= above
+    z0 = np.broadcast_to(np.asarray(z0, dtype=float), floors.shape)
+    local, matched = np.zeros(floors.shape), np.zeros(floors.shape)
+    local[floors & ~deep] = 2.0 * drag_coefficient(z0[floors & ~deep])
+    matched[deep] = 2.0 * drag_coefficient(z0[deep], height=cells_up + Z1)
+    return local, matched
 
 
 def friction_velocity(u1: float, z0: float, kappa: float = KAPPA) -> float:

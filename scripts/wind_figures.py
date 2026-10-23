@@ -276,6 +276,88 @@ def abl_profiles(out: Path) -> None:
     plt.close(fig)
 
 
+#: One colour per collision in every picture of Step 12.
+COLLISION_COLOURS = {"recursive": SERIES[0], "regularised": SERIES[1], "bgk": SERIES[3]}
+COLLISION_NAMES = {"recursive": "recursive", "regularised": "regularised", "bgk": "BGK"}
+
+
+def noise_test(out: Path) -> None:
+    """Noise in a uniform wind at Mach 0.17 with almost no viscosity (benchmarks/
+    wind_stability.py): for each of the solver's collisions, the case that fared worst of the
+    three wind directions; a line that stops at a cross is a run that failed."""
+    data = json.loads((ROOT / "results" / "wind_stability_cpu.json").read_text())
+    fig, axes = plt.subplots(1, 2, figsize=(8.6, 3.9), dpi=150, facecolor=SURFACE, sharey=True)
+    for ax, lattice in zip(axes, ("D3Q19", "D3Q27"), strict=True):
+        _style(ax)
+        ax.set_yscale("log")
+        for collision in ("regularised", "bgk", "recursive"):
+            runs = [r for r in data["runs"] if r["lattice"] == lattice and r["adopted"]
+                    and r["collision"] == collision and r["mach"] == 0.17]  # fmt: skip
+            if not runs:
+                continue
+
+            def badness(r):
+                values = [v for v in r["noise_energy_over_start"] if v is not None]
+                return (r["finite"], -(len(values)), -max(values))
+
+            worst = min(runs, key=badness)
+            values = [1.0] + [v for v in worst["noise_energy_over_start"] if v is not None]
+            steps = [k * worst["steps_per_check"] / 1000 for k in range(len(values))]
+            colour = COLLISION_COLOURS[collision]
+            label = f"{COLLISION_NAMES[collision]} (wind along {worst['direction']})"
+            ax.plot(steps, values, color=colour, linewidth=2, marker="o", markersize=3,
+                    label=label)  # fmt: skip
+            if not worst["finite"]:
+                ax.plot(steps[-1] + 1, values[-1], marker="x", color=colour, markersize=9,
+                        markeredgewidth=2.2)  # fmt: skip
+        ax.axhline(1.0, color=MUTED, linewidth=1, linestyle=(0, (4, 3)))
+        ax.set_title(lattice, color=INK, fontsize=10, loc="left")
+        ax.set_xlabel("time steps (thousands)", color=INK)
+        ax.set_xlim(0, 21)
+        ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="upper left")
+    axes[0].set_ylabel("noise energy ÷ its start (log scale)", color=INK)
+    fig.suptitle("Tiny noise in a uniform wind at Mach 0.17, with almost no viscosity",
+                 color=INK, fontsize=10.5, x=0.02, ha="left")  # fmt: skip
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+
+
+def abl_noise(out: Path) -> None:
+    """The boundary layer before and after Step 12, both with Cs = 0.1: the share of the
+    vertical wind's variance in waves shorter than 4 cells, and the correlation of the vertical
+    wind between neighbouring cells along the wind, by height."""
+    runs = json.loads((ROOT / "results" / "wind_abl_cpu.json").read_text())["runs"]
+    chosen = [r for r in runs if r["smagorinsky"] == 0.1 and r["h"] == 32
+              and "w_grid_scale_share" in r and r.get("match_cells", 0) == 0]  # fmt: skip
+    fig, (left, right) = plt.subplots(1, 2, figsize=(8.6, 4.2), dpi=150, facecolor=SURFACE,
+                                      sharey=True)  # fmt: skip
+    for ax in (left, right):
+        _style(ax)
+    for r in sorted(chosen, key=lambda r: r["collision"] != "regularised"):
+        colour = COLLISION_COLOURS[r["collision"]]
+        label = f"{r['lattice']}, {COLLISION_NAMES[r['collision']]}"
+        z = r["z"]
+        left.plot(r["w_grid_scale_share"], z, color=colour, linewidth=2, marker="o",
+                  markersize=3, label=label)  # fmt: skip
+        right.plot(r["w_neighbour_correlation_x"], z, color=colour, linewidth=2, marker="o",
+                   markersize=3, label=label)  # fmt: skip
+    left.set_xlim(0, 1)
+    right.set_xlim(-1, 1)
+    right.axvline(0.0, color=MUTED, linewidth=1)
+    left.set_xlabel("share of the variance in waves shorter than 4 cells", color=INK)
+    right.set_xlabel("correlation with the neighbouring cell along the wind", color=INK)
+    left.set_ylabel("height above the floor (cells; the lid is at 32)", color=INK)
+    left.set_title("Vertical wind: how much is noise", color=INK, fontsize=10, loc="left")
+    right.set_title("1 smooth, below 0 flipping sign", color=INK, fontsize=10, loc="left")
+    left.legend(frameon=False, fontsize=8, labelcolor=INK, loc="center right")
+    fig.suptitle("The boundary layer before and after the change of collision (Cs = 0.1)",
+                 color=INK, fontsize=10.5, x=0.02, ha="left")  # fmt: skip
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+
+
 def main() -> None:
     images = ROOT / "docs" / "images"
     lattices(images / "wind_lattices.png")

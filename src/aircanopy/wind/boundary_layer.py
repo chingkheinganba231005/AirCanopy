@@ -43,6 +43,7 @@ def run(
     u_star: float = 0.005,
     smagorinsky: float = 0.1,
     collision: str = "recursive",
+    match_cells: int = 0,
     tau0: float = 0.500003,
     spin_up: float = 10.0,
     average: float = 10.0,
@@ -56,15 +57,22 @@ def run(
 
     All lengths are in cells and speeds in cells per step. tau0 sets the molecular viscosity,
     (tau0 - 1/2) / 3: the default 1e-6 is negligible, as for real air on metre-sized cells.
-    `gusts` is the size of the random start-up gusts, as a share of the local wind.
+    `gusts` is the size of the random start-up gusts, as a share of the local wind. With
+    `match_cells` = k > 0, the wall model reads the wind k cells above the first cell
+    (walls.matched_floor_drag), at the height k + 1/2.
     """
     solid = np.zeros((h + 1, ny, nx), bool)
     solid[0] = True
-    drag = walls.rough_floor_drag(solid, z0)
     g = u_star**2 / h
     params = Params(tau0=tau0, smagorinsky=smagorinsky, g=(g, 0.0, 0.0), free_slip_top=True,
-                    slip_floors=True, collision=collision)  # fmt: skip
-    s = Solver(lat, solid, params, backend, dtype, drag=drag)
+                    slip_floors=True, collision=collision, match_cells=match_cells)  # fmt: skip
+    if match_cells:
+        _, drag = walls.matched_floor_drag(solid, z0, match_cells)
+        s = Solver(lat, solid, params, backend, dtype, match_drag=drag)
+    else:
+        drag = walls.rough_floor_drag(solid, z0)
+        s = Solver(lat, solid, params, backend, dtype, drag=drag)
+    read = 1 + match_cells  # the layer whose wind the wall model reads
     z = np.arange(h + 1) - 0.5  # height of each layer's centre above the floor plane
     z[0] = np.nan
     log_law = u_star / walls.KAPPA * np.log(z / z0)
@@ -85,7 +93,7 @@ def run(
     mean_uu = np.zeros(h + 1)
     mean_ww = np.zeros(h + 1)
     floor_stress = 0.0
-    lam = 2 * walls.drag_coefficient(z0)
+    lam = 2 * walls.drag_coefficient(z0, height=read - 0.5)
     column_u = [spin_up_column_u[-1]] if spin_up_column_u else []
     # Noise at the scale of the grid in the vertical wind, layer by layer (module docstring).
     kx, ky = (np.abs(np.fft.fftfreq(m) * m) for m in (nx, ny))
@@ -101,10 +109,11 @@ def run(
         mean_uw += (du * uz).mean(axis=(1, 2))
         mean_uu += (du * du).mean(axis=(1, 2))
         mean_ww += (uz * uz).mean(axis=(1, 2))
-        speed1 = np.sqrt(ux[1] ** 2 + uy[1] ** 2 + uz[1] ** 2)
-        floor_stress += float((0.5 * lam * rho[1] * speed1 * ux[1]).mean())
-        floor_push += float((speed1 * ux[1]).mean())
-        floor_u += float(ux[1].mean())
+        # The floor's friction acts on the first layer, driven by the wind of the layer read.
+        speed = np.sqrt(ux[read] ** 2 + uy[read] ** 2 + uz[read] ** 2)
+        floor_stress += float((0.5 * lam * rho[1] * speed * ux[read]).mean())
+        floor_push += float((speed * ux[read]).mean())
+        floor_u += float(ux[read].mean())
         column_u.append(float(ux[1:].mean()))
         w = uz[1:]
         spectrum = np.abs(np.fft.fft2(w)) ** 2
@@ -127,6 +136,8 @@ def run(
         "g": g,
         "smagorinsky": smagorinsky,
         "collision": collision,
+        "match_cells": match_cells,
+        "wall_model_height": read - 0.5,
         "tau0": tau0,
         "lattice": lat.name,
         "steps": s.time,
@@ -147,8 +158,8 @@ def run(
         # The column's mean wind over u*, once per turnover of the spin-up, then at each sample.
         "spin_up_column_u": [v / u_star for v in spin_up_column_u],
         "column_u": [v / u_star for v in column_u],
-        # In the first layer, mean(|U| u) / mean(u)^2: how much the gusts raise the friction
-        # above what the mean wind alone would give.
+        # In the layer the wall model reads, mean(|U| u) / mean(u)^2: how much the gusts raise
+        # the friction above what the mean wind alone would give.
         "floor_gust_factor": (floor_push / samples) / (floor_u / samples) ** 2,
         "w_grid_scale_share": [float(v) for v in w_short / w_all],
         "w_neighbour_correlation_x": [float(v) for v in w_lag / w_sq],
