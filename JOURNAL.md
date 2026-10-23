@@ -209,11 +209,14 @@ Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-mo
 
 ### P1 Real-world site
 
-- [ ] Coordinates: from latitude and longitude to local metres
-- [ ] Buildings from Overture Maps and OpenStreetMap, with heights and where each height came from
+- [x] Coordinates: from latitude and longitude to local metres (`geo.py`)
+- [x] Downloads cached with their source, time, licence and checksum (`sources/cache.py`)
+- [x] Buildings from OpenStreetMap, with heights and where each height came from (`sources/osm.py`, `site/`)
+- [ ] Buildings from Overture Maps (worldwide footprints and heights)
 - [ ] Terrain from Copernicus DEM
-- [ ] Trees from OpenStreetMap and the canopy height map
-- [ ] Roads and lanes
+- [x] Trees from OpenStreetMap (position, height, crown, species when mapped)
+- [ ] Trees from the canopy height map (to fill heights and find unmapped trees)
+- [x] Roads and footways from OpenStreetMap (class, lanes, width when mapped)
 - [ ] Meshes and glTF export
 - [ ] Voxel grid
 - [ ] Command line: `aircanopy site build`
@@ -320,6 +323,58 @@ uv run aircanopy --version   # the command works
 
 **Next.** The real-world site builder: coordinates, buildings, terrain, trees and roads for any place.
 
+### 2026-10-23 · Step 3 · Reading a real place from OpenStreetMap
+
+**Goal.** Turn a box on the map into lists of buildings, trees and roads in metres, keeping track of where every number came from.
+
+**What we did.**
+
+1. `geo.py`: a `BBox` (a box of longitude and latitude) and a `LocalFrame` that converts between degrees and flat metres around the centre of the box (see [6.6](#66-coordinates-from-latitude-and-longitude-to-metres)).
+2. `sources/cache.py`: downloads are saved in a cache folder, each with a small `.source.json` file recording the URL, the time, the size, the SHA-256 checksum, the licence and the attribution. A cached file is reused only if its checksum still matches.
+3. `sources/osm.py`: downloads OpenStreetMap data for a box from the main API and reads the XML into nodes, ways and relations. It also joins outlines that are split over several ways into closed rings.
+4. `site/heights.py`: works out each building's height from its tags, and labels where the height came from.
+5. `site/model.py`: the `Site` with its `Building`, `Tree` and `Road` records; it saves to and loads from JSON.
+6. `site/from_osm.py`: builds a `Site` from OpenStreetMap data.
+7. 37 new tests, using a small real sample from near HKU stored in `tests/data/osm/` (compressed, 111 kB) and small made-up maps written by `tests/osm_builder.py`.
+
+**What the HKU sample showed.** In a 600 m × 440 m box around HKU there were 203 building outlines but only 5 with a measured `height` tag; 171 gave a number of storeys instead. Only 6 trees were mapped. So in Hong Kong most heights must be estimated from storeys, and most trees are missing from OpenStreetMap. Both facts shape the next steps: a second building source (Overture Maps) and a tree source from satellite data (the canopy height map).
+
+**Why.**
+
+- *Missing stays missing.* If a building has no height in the data, its height is `None` with the source `"missing"`, not a made-up number. A later step decides how to fill the gap and labels what it filled. This keeps guesses from quietly turning into "data".
+- *Heights from storeys are labelled.* Storeys × 3.0 m is an assumption (A-001 in `docs/assumptions.md`). Every height made this way carries the source `"osm:levels"`.
+- *Building parts.* OpenStreetMap can describe a building twice: once as an outline (for flat maps) and again as parts with their own heights (for 3D). The OpenStreetMap wiki says the outline is ignored in 3D when parts exist, so we do the same and never count the volume twice.
+- *We checked the rules we rely on.* The 0.25 square-degree limit comes from the API's own capabilities page; the meaning of the height tags from the wiki page "Simple 3D Buildings". Both are recorded in `docs/sources.md` with the date. A limit of 50 000 nodes that we remembered could not be found on those pages, so we did not use it.
+
+**How.**
+
+```bash
+# What the code does for a box (west, south, east, north in degrees):
+curl -A "AirCanopy/0.1" "https://api.openstreetmap.org/api/0.6/map?bbox=114.1360,22.2832,114.1380,22.2848" -o sample.osm
+uv run pytest tests/test_site_osm.py -v
+```
+
+```python
+from aircanopy.sources import osm
+from aircanopy.site.from_osm import site_from_osm
+
+data = osm.parse(path_to_osm_file)
+site = site_from_osm("hku", data.bounds, data)
+print(len(site.buildings), site.buildings[0].height, site.buildings[0].height_source)
+```
+
+**What to understand.**
+
+- See [6.7](#67-map-data-points-lines-polygons-and-tags) for how map data describes the world.
+- A *checksum* (SHA-256) is a 64-character fingerprint of a file. If even one byte changes, the fingerprint changes completely. Storing it lets anyone confirm they have exactly the same data.
+- Tests should not need the internet: services go down and data change. So tests use a stored sample, and the sample's source and checksum are recorded in `tests/data/README.md`.
+
+**Problems and fixes.**
+
+- A test placed a tree 9 micrometres away from where it expected. The cause was rounding coordinates to 9 decimals of a degree in the made-up map. The tolerance had been set unrealistically tight (one micrometre); real OpenStreetMap coordinates have 7 decimals, about 1 cm, so the test now allows 1 mm.
+
+**Next.** Meshes for drawing, a voxel grid for the physics, and the `aircanopy site build` command.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -358,6 +413,16 @@ A *voxel* is a small cube, the 3D version of a pixel. Our site becomes a 3D grid
 ### 6.6 Coordinates: from latitude and longitude to metres
 
 Maps give positions as latitude and longitude, angles on a round Earth. Physics needs flat distances in metres. For an area of a few kilometres we can flatten the Earth around the centre of the site, like laying a flat sheet on a ball where it touches. This is a *local projection*. We use the standard library pyproj to do it correctly, including the slightly flattened shape of the Earth.
+
+### 6.7 Map data: points, lines, polygons and tags
+
+Map data come in two main forms:
+
+- **Vector data** describe things as shapes: a *point* (a tree), a *line* (a road), a *polygon* (a building outline, possibly with holes such as a courtyard). OpenStreetMap is vector data.
+- **Raster data** cover the ground with a grid of pixels, each holding a value: an elevation, a canopy height, a land-cover class. Satellite products are raster data.
+
+OpenStreetMap stores *nodes* (points with a latitude and longitude), *ways* (ordered lists of nodes: a line, or a closed ring when the first node equals the last) and *relations* (groups of ways, used for example for a building with a courtyard: one outer ring and one inner ring). Anything can carry *tags*, pairs such as `building=school` or `height=24`. Tags are added by volunteers, so they are rich in some places and missing in others, and every tool that uses them must cope with gaps.
+
 
 (More lessons follow as the project reaches them: wall models, trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
