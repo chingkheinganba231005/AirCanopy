@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Data downloaded at run time (sources and checksums are recorded, the files are not committed)
+data/cache/
+cache/
+
+# Simulation and site outputs (large; results worth keeping go to results/ as small JSON)
+runs/
+outputs/
+sites/
+
+# JavaScript
+node_modules/
+ui/dist/
+
+# Secrets and local settings
+.env
+*.key
+
+# Editors and systems
+.DS_Store
+.idea/
+.vscode/

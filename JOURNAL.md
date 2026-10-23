@@ -1,0 +1,343 @@
+# AirCanopy build journal
+
+This file tells the story of how AirCanopy is built, step by step, in plain words. It is meant to teach. If you read it from top to bottom you should understand what every part of the project does, why it is built that way, and how to rebuild it yourself.
+
+It is also the project's memory. Every working session adds to it, so nothing is lost when a session ends.
+
+## How to read this journal
+
+| Part | What it holds | When it changes |
+| --- | --- | --- |
+| [1. What AirCanopy is](#part-1--what-aircanopy-is) | The idea in simple words | Rarely |
+| [2. Lessons from Trees vs Breath](#part-2--lessons-from-trees-vs-breath) | What the hackathon version did, and what it could not do | Rarely |
+| [3. The plan](#part-3--the-plan) | The big picture, the science we will add, the phases | When a phase starts or the plan changes |
+| [4. Progress](#part-4--progress) | A checklist of everything, ticked as it is done | Every session |
+| [5. Step-by-step log](#part-5--step-by-step-log) | What we did, why, how, and what to learn from it | Every session, newest at the bottom |
+| [6. Concepts explained simply](#part-6--concepts-explained-simply) | Short lessons on the science and the computing | When a new idea first appears |
+| [7. Decisions](#part-7--decisions) | Every important choice and the reason for it | When we choose something |
+| [8. Open questions](#part-8--open-questions-for-the-owner) | Things only you can decide | When they come up or get answered |
+
+Each log entry in Part 5 has the same shape:
+
+- **Goal**: what we wanted to achieve.
+- **What we did**: the actual steps.
+- **Why**: the reasoning, including the options we did not take.
+- **How**: the commands and files, so you can repeat it.
+- **What to understand**: the idea you should take away.
+- **Problems and fixes**: what went wrong and how we solved it.
+- **Next**: what comes after.
+
+---
+
+## Part 1 — What AirCanopy is
+
+**In one sentence:** pick any place in the world, see it in 3D, plant trees in it virtually, and find out with physics and AI how those trees change the heat and the air pollution that people feel at street level.
+
+**Who it is for:** city planners, landscape architects, environment departments, engineering consultants, researchers, and community groups who want evidence before they plant.
+
+**The questions it answers:**
+
+1. If we plant these trees here, how much cooler does the street feel for people walking in it?
+2. Does the air people breathe get cleaner or dirtier? (Trees shade and cool, but in a narrow street their crowns can slow the wind and hold traffic fumes in.)
+3. Which layout, species and size gives the best balance between the two, for a given budget?
+4. How sure are we about each answer?
+
+**Why it is hard:** heat and air pollution in a street depend on the wind, the sun, the buildings, the trees, the traffic, the weather and the chemistry of the air, all at once and all in 3D. A tree can help one and hurt the other. To answer honestly we need a 3D simulation of the air, the sun and the chemistry, checked against measurements, plus a fast AI model so people can try many ideas quickly.
+
+**What changes from the hackathon version:**
+
+| | Trees vs Breath (hackathon) | AirCanopy |
+| --- | --- | --- |
+| Space | A 2D slice across one street | Full 3D: buildings, terrain, trees, streets |
+| Places | Three Hong Kong streets, wind-tunnel shapes | Any place in the world, from open map data |
+| Trees | Porous rectangles | 3D crowns with leaves spread through them (leaf area density), by species, bending in the wind |
+| Air pollution | One passive tracer | Nitrogen oxides, ozone and fine particles, with chemistry, deposition on leaves, and traffic turbulence |
+| Heat | Sun and shade in a 2D slice, no heat storage | 3D sun and sky, reflections, surfaces that store heat, cooling by leaves (evaporation), warm air rising (buoyancy) |
+| Scale | A small model street (Reynolds number 20 000) | Real size in metres, with models for the thin air layer next to walls |
+| AI | Small networks on a few numbers | 3D neural operators that understand geometry, with uncertainty and active learning |
+| App | Web page | A desktop-style app (Python engine, 3D view in a browser window) with real-world 3D maps and tree placement |
+
+---
+
+## Part 2 — Lessons from Trees vs Breath
+
+Trees vs Breath reached the top 8 of HacKU 2026. It is worth knowing exactly what it did and where it stopped, because AirCanopy fixes those limits.
+
+### What it did
+
+- A 2D lattice Boltzmann wind solver (more on this method in [6.4](#64-the-lattice-boltzmann-method)) that ran live in the browser on the graphics card (WebGPU) or the processor.
+- Trees and hedges as porous blocks that slow the wind (the CODASC wind-tunnel crowns).
+- Traffic fumes as a passive tracer, compared with the CODASC wind-tunnel measurements of a street with trees.
+- A heat model: sun position, shade from roofs and crowns in the 2D slice, radiant temperature, and the UTCI "feels-like" temperature, checked against standard reference software (pvlib and pythermalcomfort).
+- A small AI surrogate (five small networks and a U-Net) trained on solver runs, and a design search (NSGA-II) for the trade-off between heat and fumes.
+
+### What we learned (the limits AirCanopy must fix)
+
+1. **2D traps fumes.** In a 2D slice, air cannot leave a street sideways. A street closed by dense crowns kept almost all its fumes and needed about 100 000 solver steps to fill up and settle. Real streets are 3D: air also escapes along the street and between trees. So 2D exaggerates the harm of trees.
+2. **Turbulent averages are noisy.** Wind in a street swirls and changes all the time. Averages over a fixed time window still moved by about 10–15% between windows. Any honest result has to say how much it still moves.
+3. **Coarse grids change the physics.** With only 24 cells per building height, a deep street (twice as tall as wide) lost its second, weaker vortex. Resolution must be checked, not assumed.
+4. **The numerical method must be robust.** The simplest collision rule (BGK) blew up at low viscosity. A more robust rule (regularised) fixed it. In 3D at real scale we need robust methods from the start.
+5. **Real scale matters.** The model ran at a Reynolds number of 20 000, far below a real street. For a street without trees the results hardly changed with Reynolds number, but with dense crowns they did. AirCanopy works in real units with models for the air layer next to walls.
+6. **The heat model was simple.** Walls and paving did not store heat, the sky was always clear, crowns only blocked direct sunlight, and evaporation from leaves was left out.
+7. **An AI model is only as good as its training data.** The noise in the solver's own averages limited how accurate the surrogate could look. A guard was needed to refuse designs outside the training data, and a physics check to confirm the AI's picks.
+8. **Engineering habits that worked:** every number came from a cited source or a dated computation file; every result carried the code version that made it; tests ran on every change. AirCanopy keeps these habits.
+
+### What we keep and what we change
+
+- **Keep:** the habits above; the validated sun-position and UTCI code (ported with their reference tests); the know-how about lattice Boltzmann stability; NSGA-II.
+- **Change:** everything else is rebuilt for 3D, real scale, real places and real physics.
+
+---
+
+## Part 3 — The plan
+
+### 3.1 The big picture
+
+```
+ Real-world data             Site builder            Physics engines              Results and AI              You
+ ─────────────────           ─────────────           ────────────────             ───────────────             ───
+ buildings, terrain,   ───►  a 3D model of    ───►   wind, heat, chemistry  ───►  3D fields, street-level ──► 3D app:
+ trees, roads, land          the place, on a          on a graphics card           maps, a fast AI            plant trees,
+ cover, weather,             grid of small                                         surrogate, uncertainty     see the trade-off,
+ traffic                     cubes (voxels)                                                                  check with physics
+```
+
+1. **Data layer.** Downloads open data for any place: building footprints and heights, terrain height, existing trees, roads with their type, land cover, weather, and background air quality. Everything is cached locally and every file records where it came from and under which licence.
+2. **Site builder.** Turns the data into a 3D model of the place in metres: building blocks, ground, tree crowns, traffic lanes. It produces two forms: meshes (surfaces made of triangles) for drawing, and a voxel grid (the space cut into small cubes) for the physics.
+3. **Physics engines.**
+   - *Wind:* a 3D lattice Boltzmann large-eddy simulation on the graphics card, at real scale.
+   - *Trees in the wind:* crowns as porous clouds of leaves that slow the air and bend in strong wind.
+   - *Air pollution:* traffic emissions, transport by the wind, chemistry between nitrogen oxides and ozone, and deposition on leaves and surfaces.
+   - *Heat:* sun and sky radiation traced in 3D through buildings and leaves, surfaces that warm up and store heat, leaves that cool by evaporating water, and warm air that rises.
+   - *Human comfort:* mean radiant temperature and UTCI at 1.1 m above the ground, everywhere.
+4. **AI surrogate.** Trained on many physics runs from many real places, so it can answer in a fraction of a second, say how sure it is, and refuse when a design is unlike anything it has seen.
+5. **App.** A 3D view of the real place where you can move, add and change trees, run the physics or the AI, and see wind, pollution and heat in rich, interactive 3D.
+
+### 3.2 The science we add, process by process
+
+You asked for every limit of the simplified model to be addressed. This table is the plan for each one. "Fidelity" says how close to reality the method is, and how we will check it.
+
+| Process | In Trees vs Breath | In AirCanopy | How we will check it |
+| --- | --- | --- | --- |
+| 3D wind | 2D slice | 3D large-eddy simulation (lattice Boltzmann) | Standard test flows, a flow around a cube, wind-tunnel models of city blocks |
+| Real-scale Reynolds number | Model scale, Re 20 000 | Real size in metres with a wall model for the thin layer of air next to surfaces | Compare runs at different resolutions; compare with wind-tunnel and field data |
+| 3D buildings and terrain | Rectangles | Real footprints and heights (OpenStreetMap, Overture Maps, city 3D models), terrain from a global elevation model | Check heights against city 3D models where they exist |
+| 3D trees and leaves | Porous rectangles | Species-based 3D crowns with leaf area density that varies with height and distance from the trunk | Canopy-flow experiments; the CODASC tree cases in 3D |
+| Moving crowns | Not modelled | Crowns streamline in strong wind, so their drag grows more slowly than the wind squared; swaying shown in the app | Published wind-tunnel drag measurements of real tree crowns |
+| Deposition on leaves | Not modelled | Gases and particles stick to leaves and surfaces at a speed set by resistances (leaf boundary layer, stomata, leaf surface) | Published deposition velocities |
+| Evaporation (transpiration) | Not modelled | A leaf energy balance: leaves absorb sunlight, lose heat to the air and by evaporating water through their pores; this cools the air and adds humidity | Published leaf and canopy energy-balance measurements |
+| Buoyancy | Not modelled | Air temperature is a full part of the flow: warm air near sunny walls and ground rises | Standard buoyant-flow tests; heated street-canyon experiments |
+| Traffic turbulence | Not modelled | Moving vehicles stir the air above each lane, modelled from vehicle size, speed and count; vehicles also add heat | The CODASC wind-tunnel cases with moving traffic |
+| Chemistry | One passive tracer | Nitric oxide, nitrogen dioxide and ozone react, and sunlight splits nitrogen dioxide; background ozone comes in with the wind. Later: organic compounds, including those trees emit | The photostationary-state balance; comparison with an established urban model |
+| Particles | Not modelled | Fine particles (PM2.5) carried by the wind and deposited on leaves | Published particle-deposition measurements |
+| Radiation and heat | 2D, clear sky, no storage | 3D ray tracing of sun and sky through buildings and leaves, reflections, longwave heat from every surface, heat stored in walls and paving, cloudy skies from weather data | Measured mean radiant temperature in real streets |
+| Comfort | UTCI at two points | Mean radiant temperature and UTCI maps over every street; later PET | Reference implementations |
+| Weather and traffic | Fixed presets | Hourly weather from reanalysis or forecast data; traffic from counts or estimates by road type; emission factors from published inventories | Compare with monitoring stations where available |
+
+**What we will be honest about.** No simulation of a real city is exact. For air pollution in cities, a model is usually judged acceptable when at least about a third of its predictions fall within a factor of two of the measurements (the urban criteria of Hanna and Chang, 2012, which Trees vs Breath also used). AirCanopy will compare scenarios (with and without trees, layout A against layout B) under the same conditions, report its uncertainty, and say where it has been validated and where it has not.
+
+**A note on an established model.** PALM-4U is a mature, open-source urban climate model that already includes most of these processes. It is written in Fortran for supercomputers. AirCanopy builds its own fast GPU engine so it can run on one graphics card and drive an interactive app, and it will use PALM-4U as an independent reference to check its results (stretch goal, phase 8).
+
+### 3.3 Technology choices
+
+| Part | Choice | Why |
+| --- | --- | --- |
+| Language | Python 3.11+ | The scientific and AI ecosystem; you already know it |
+| GPU physics | JAX | Compiles numerical code to fast GPU programs; batches many runs at once; gives gradients for free (useful for AI and optimisation) |
+| AI | PyTorch | The most common framework for neural operators and training |
+| Geometry and maps | shapely, pyproj, trimesh, rasterio, pyarrow | Standard, well-tested open-source libraries |
+| App | A local Python server (FastAPI) with a 3D view built with web graphics (three.js) and opened in a browser window | The best free 3D graphics ecosystem; runs on any computer; can be wrapped as a desktop app later. It does not need to be a public website |
+| Packages | uv with a lock file | Exact, repeatable installs |
+| Tests | pytest; GitHub Actions on every push | Catch mistakes early |
+
+**Hardware.** Small tests run on any processor. Real runs need an NVIDIA graphics card: your own, or a rented one in the cloud (Google Colab, or GPU rental services). A rough guide to memory: one D3Q19 lattice Boltzmann cell stores 19 numbers of 4 bytes each, 76 bytes, and the solver keeps about two copies plus a few fields, so a little over 150 bytes per cell. A neighbourhood of 500 m × 500 m × 150 m at 2 m resolution is 250 × 250 × 75 ≈ 4.7 million cells, about 0.7 GB. At 1 m it is 37.5 million cells, about 6 GB. Both fit on one modern graphics card.
+
+### 3.4 Data sources
+
+Every dataset must have its licence checked before we use it (rule in `CLAUDE.md`). Until then it is marked *to verify*.
+
+| What | Source | Coverage | Licence | Status |
+| --- | --- | --- | --- | --- |
+| Building footprints and heights | Overture Maps (buildings theme), on Amazon S3 | World | ODbL (built from OpenStreetMap and other sources) | to verify |
+| Building footprints, heights, trees, roads | OpenStreetMap (main API for small areas; Overpass where reachable) | World | ODbL 1.0 | to verify |
+| Roads with type and lanes | Overture Maps (transportation theme) | World | ODbL | to verify |
+| Terrain height | Copernicus DEM GLO-30, on Amazon S3 | World, 30 m | Copernicus DEM licence (free use with attribution) | to verify |
+| Tree canopy height | Meta and WRI high-resolution canopy height maps, on Amazon S3 | World, 1 m | CC BY 4.0 | to verify |
+| Land cover | ESA WorldCover | World, 10 m | CC BY 4.0 | to verify |
+| Weather | ERA5 reanalysis (Copernicus Climate Data Store); Open-Meteo | World, hourly | Copernicus licence; Open-Meteo terms (free for non-commercial use) | to verify |
+| Background air quality | CAMS (Copernicus Atmosphere Monitoring Service); OpenAQ measurements | World | Copernicus licence; source-dependent | to verify |
+| City 3D models | Open city models (for example CityGML level of detail 2 from many European cities, New York, Hong Kong) | Some cities | Varies by city | to verify |
+
+### 3.5 Phases
+
+Each phase ends with something you can run and see, and tests that pass.
+
+| Phase | Goal | You will be able to | Exit check |
+| --- | --- | --- | --- |
+| **P0 Foundations** | Repository, rules, journal, Python package, automatic tests | Install the package and run its tests | Tests pass on GitHub |
+| **P1 Real-world site** | Any place in the world as a 3D model | Type a place and see its buildings, terrain, trees and roads in 3D | A 3D view of a real neighbourhood; tests on stored sample data |
+| **P2 3D wind** | A validated 3D wind solver on the GPU | Run wind through a real neighbourhood | Standard test flows match their references; flow around a cube matches experiments |
+| **P3 Trees in the wind** | Real 3D tree crowns that slow and steer the wind | Plant trees and see the wind change | Canopy flow and the CODASC 3D tree cases |
+| **P4 Air pollution** | Traffic emissions, chemistry, deposition, traffic turbulence | See NO₂, ozone and PM2.5 at breathing height | Wind-tunnel and published checks |
+| **P5 Heat** | 3D sun, shade, surfaces, evaporation, buoyancy, comfort | See UTCI and radiant temperature maps through the day | Measured radiant temperature in real streets |
+| **P6 The app** | Place and edit trees in a real-world 3D scene, run and compare | Design a street and see wind, fumes and heat in rich 3D | You can do a full study without code |
+| **P7 Advanced AI** | Geometry-aware neural operators with uncertainty and active learning | Get instant answers and the best layouts, then confirm with physics | Accuracy and calibration reported on places the AI never saw |
+| **P8 Ready for the world** | Validation report, documentation, installers, examples | Install it like any other tool | A versioned release |
+
+Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-model data for whole cities; virtual reality walk-throughs.
+
+### 3.6 How we work
+
+- Small steps. Each step is tested before the next one starts.
+- Commit and push often, at least every 30–60 minutes of work, so nothing is lost.
+- Every number comes from a cited source or from our own dated computation saved in `results/`.
+- Every step is explained in this journal in simple words.
+- Nothing is trusted until it has been checked against a reference.
+
+---
+
+## Part 4 — Progress
+
+### P0 Foundations
+
+- [x] New repository `aircanopy`, commits under the owner's name
+- [x] Checked which data sources this cloud environment can reach
+- [x] Journal (this file) with the plan
+- [x] Working rules for AI-assisted sessions (`CLAUDE.md`), README, licence, `.gitignore`
+- [ ] Python package skeleton with uv, ruff and pytest
+- [ ] Automatic tests on GitHub (continuous integration)
+
+### P1 Real-world site
+
+- [ ] Coordinates: from latitude and longitude to local metres
+- [ ] Buildings from Overture Maps and OpenStreetMap, with heights and where each height came from
+- [ ] Terrain from Copernicus DEM
+- [ ] Trees from OpenStreetMap and the canopy height map
+- [ ] Roads and lanes
+- [ ] Meshes and glTF export
+- [ ] Voxel grid
+- [ ] Command line: `aircanopy site build`
+- [ ] 3D viewer
+
+(Later phases are listed in [3.5](#35-phases) and get their own checklists when they start.)
+
+---
+
+## Part 5 — Step-by-step log
+
+### 2026-10-23 · Step 1 · Starting AirCanopy
+
+**Goal.** Start a new project that rebuilds Trees vs Breath as a serious 3D tool, in a new repository, with a plan and this journal.
+
+**What we did.**
+
+1. Attached the new GitHub repository `chingkheinganba231005/aircanopy` to the cloud session and cloned it. It was empty.
+2. Set the commit author to your name, so the history shows your work. We used your GitHub "noreply" address (`217364735+chingkheinganba231005@users.noreply.github.com`) rather than your personal email: GitHub still links the commits to your account, and your personal address does not become public in the history.
+3. Checked which data services this cloud machine can reach (results below).
+4. Wrote this journal with the plan.
+
+**Why.**
+
+- *A new repository instead of fixing the old one:* the hackathon code was built around a 2D browser solver. A 3D real-scale tool needs a different structure from the ground up. We will still copy over pieces that were tested and worked, with their tests.
+- *The journal first:* you asked to learn every step. Writing the plan down first also makes the later steps easier to judge.
+
+**How.**
+
+```bash
+git clone https://github.com/chingkheinganba231005/aircanopy
+cd aircanopy
+git config user.name  "Chingkheinganba Rajkumar"
+git config user.email "217364735+chingkheinganba231005@users.noreply.github.com"
+```
+
+`git config` without `--global` stores the name only for this repository.
+
+To test whether a website can be reached, we asked for its address and printed only the HTTP status code:
+
+```bash
+curl -sS -o /dev/null -m 20 -w "%{http_code}\n" https://overpass-api.de/api/status
+```
+
+A code of 200 means "OK". 000 means no connection at all (here, the cloud machine's network rules block it).
+
+**Results of the network check (from this cloud machine only).**
+
+| Service | Reachable here? | Used for |
+| --- | --- | --- |
+| Amazon S3 open data (Overture Maps, Copernicus DEM, Meta canopy height) | Yes | Buildings, roads, terrain, tree heights |
+| OpenStreetMap main API | Yes | Small areas: trees and details |
+| Overpass API (OpenStreetMap queries) | No | Bigger OpenStreetMap queries |
+| Open-Meteo | No | Weather |
+| Copernicus Climate Data Store | Yes (needs a free account and key) | ERA5 weather |
+| PyPI, npm | Yes | Software packages |
+
+On your own computer all of these will probably work. The code will offer more than one source for each kind of data, so a blocked service is never a dead end.
+
+**What to understand.**
+
+- A Git repository stores every version of every file. A *commit* is one saved version with a message. *Pushing* copies your commits to GitHub, so they are safe even if this computer disappears.
+- The author name and email are stamped on each commit when it is made. They are not checked against your login, which is why they must be set correctly before committing.
+
+**Next.** Working rules, README and licence; then the Python package skeleton and automatic tests.
+
+---
+
+## Part 6 — Concepts explained simply
+
+These short lessons explain ideas the first time the project needs them. Later lessons build on earlier ones.
+
+### 6.1 What it means to simulate air
+
+Air is a fluid. At every point it has a velocity (how fast and in which direction it moves), a pressure, a temperature, and amounts of other gases and particles mixed into it. The laws that say how these change are the Navier–Stokes equations: they are Newton's law (force = mass × acceleration) and the conservation of mass, written for a fluid. Nobody can solve them exactly for a city, so we cut space into many small cells and time into many small steps, and update every cell a little at each step. That is a *simulation*, and doing it for fluids is called *computational fluid dynamics* (CFD).
+
+### 6.2 The Reynolds number
+
+The Reynolds number compares how much a flow tends to keep moving (inertia) with how much its internal friction (viscosity) slows it down:
+
+Re = (speed × size) / kinematic viscosity
+
+For a street with wind at 2 m/s and buildings 20 m tall, using the kinematic viscosity of air at about 20 °C, roughly 1.5 × 10⁻⁵ m²/s, Re ≈ 2 × 20 / 1.5 × 10⁻⁵ ≈ 2.7 million. At such high Reynolds numbers the flow is turbulent: it breaks into eddies of every size, from the size of the street down to millimetres. No computer can follow all of them in a whole neighbourhood, which leads to the next idea.
+
+### 6.3 Turbulence and large-eddy simulation (LES)
+
+Large eddies carry most of the air and the pollution; small eddies mostly turn motion into heat. *Large-eddy simulation* computes the large eddies directly on the grid and represents the effect of the small ones with a simple model (a *subgrid* model, such as the Smagorinsky model, which adds extra viscosity where the flow is strongly sheared). This is the standard way to simulate city air when details matter.
+
+### 6.4 The lattice Boltzmann method
+
+Instead of solving the Navier–Stokes equations directly, the lattice Boltzmann method (LBM) imagines that each cell holds small packets of air moving in a few fixed directions (19 or 27 directions in 3D, called D3Q19 and D3Q27). Each step has two parts:
+
+1. **Streaming:** every packet moves to the neighbouring cell in its direction.
+2. **Collision:** in each cell, the packets are nudged towards a balanced mix that has the same density and velocity.
+
+Density and velocity come from adding up the packets. It can be shown that, on average, this simple rule behaves like the Navier–Stokes equations. LBM is popular for city flows because every cell does the same simple work, which suits graphics cards perfectly, and complicated building shapes are easy: a packet that would move into a wall bounces back.
+
+### 6.5 Grids and voxels
+
+A *voxel* is a small cube, the 3D version of a pixel. Our site becomes a 3D grid of voxels, each marked as air, building, ground or tree crown. The size of a voxel is the *resolution*. Smaller voxels show more detail but cost more memory and time: halving the voxel size makes 8 times as many voxels and, because the time step also halves, about 16 times the work.
+
+### 6.6 Coordinates: from latitude and longitude to metres
+
+Maps give positions as latitude and longitude, angles on a round Earth. Physics needs flat distances in metres. For an area of a few kilometres we can flatten the Earth around the centre of the site, like laying a flat sheet on a ball where it touches. This is a *local projection*. We use the standard library pyproj to do it correctly, including the slightly flattened shape of the Earth.
+
+(More lessons follow as the project reaches them: wall models, trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
+
+---
+
+## Part 7 — Decisions
+
+| ID | Decision | Why |
+| --- | --- | --- |
+| D-001 | Start a new repository and rebuild; copy only tested pieces from Trees vs Breath, with their tests | The 3D real-scale design is different from the hackathon's 2D browser design |
+| D-002 | Commits are authored as Chingkheinganba Rajkumar with the GitHub noreply address | Your request; the noreply address links commits to your account without publishing your personal email |
+| D-003 | Work on the `main` branch of the new repository | The repository was created empty for this project; there is no one else's work to protect yet |
+| D-004 | Python engine with a local 3D app opened in a browser window, not a public website | 3D physics needs a GPU and large memory, which a public web page cannot rely on; browser graphics are still the best free 3D toolkit |
+| D-005 | Each kind of data has more than one source (for example Overture Maps or OpenStreetMap for buildings) | Services can be blocked or down; open data coverage differs by country |
+
+---
+
+## Part 8 — Open questions for the owner
+
+1. **Licence.** Trees vs Breath used MIT. For a tool aimed at companies and governments, Apache-2.0 is a common alternative: it is just as open and adds an explicit patent licence. Which do you prefer? (Until you choose, the repository uses MIT, like your earlier project.)
+2. **Graphics card.** Do you have an NVIDIA graphics card on your own computer? If not, large runs will go to Google Colab or a rented GPU.
+3. **First demonstration place.** Hong Kong (near HKU), or somewhere else?
+4. **Commit email.** Commits use your GitHub noreply address. If you would rather use your personal email, say so.
