@@ -215,7 +215,7 @@ Stretch goals after P8: a cross-check against PALM-4U; nesting inside weather-mo
 - [x] Buildings from Overture Maps (worldwide footprints and heights), joined to OpenStreetMap (`sources/overture.py`, `site/from_overture.py`)
 - [x] Terrain from GEDTM30 (bare earth), with Copernicus GLO-30 as a labelled fallback; buildings, roads and trees stand on the ground; the view shows 1 km of real surroundings (`sources/terrain.py`, `site/terrain.py`)
 - [x] Trees from OpenStreetMap (position, height, crown, species when mapped)
-- [ ] Trees from the canopy height map (to fill heights and find unmapped trees)
+- [x] Trees from the Meta/WRI canopy height map: individual crowns found by watershed, joined with mapped trees (`sources/canopy.py`, `site/canopy.py`)
 - [x] Roads and footways from OpenStreetMap (class, lanes, width when mapped)
 - [x] Missing building heights estimated from neighbours, and labelled (`site/fill.py`)
 - [x] Underground buildings and open roofs left out, and listed (`site/from_osm.py`)
@@ -580,6 +580,47 @@ While working on the viewer, `cd ui && npm run dev` serves it with instant reloa
 
 **Next.** Trees from the satellite canopy height map: OpenStreetMap has only 6 trees in the HKU square, none with a height.
 
+### 2026-10-23 · Step 8 · Every tree, from space: the canopy height map
+
+**Goal.** Find the trees the map leaves out. The whole project is about trees, and OpenStreetMap has only 6 in the HKU square, none with a height.
+
+**What we did.**
+
+1. `sources/canopy.py` reads the global canopy height map of Meta and the World Resources Institute (WRI). It gives the height of the vegetation every 1.2 m, worldwide, estimated from satellite images by a model trained on aircraft lidar (Tolan et al. 2024).
+2. `site/canopy.py` puts the map on a 1 m grid in the site's metres and removes canopy inside buildings (A-007). Then it finds individual trees (see *What to understand*) and joins them with the mapped trees: a mapped tree inside a crown gives that crown its id and species.
+3. The site folder gets `canopy.npz`, the full canopy for the physics later, and every crown becomes a tree with a height, a crown width and the ground under it.
+4. The viewer draws the trees, says where each height came from, with the date of the satellite images, and sums up the canopy in the panel.
+5. `--no-canopy` leaves the map out, and `--canopy-file` reads a stored copy. The browser tests now also click a tree.
+6. 8 new tests (94 in total), and one more browser test.
+
+**What it found around HKU** (`results/site_hku.json`). 174 tree crowns, from 5 to 22 m tall (median 12 m), and from 3.6 to 42.6 m across (median 15.6 m). Canopy at least 5 m tall covers 20% of the square. One of the 6 mapped trees stands inside a found crown; the other 5 are in none. The satellite images are from 3 April 2018.
+
+**Why.**
+
+- *Why this map?* It is the only free, worldwide map of tree height fine enough to see single trees (about 1 m). Its paper tested it against lidar it was not trained on: mean absolute error 2.8 m, mean error 0.6 m.
+- *Why its own thresholds?* To decide what is a tree we use the rules of the map's own paper: canopy at least 5 m tall counts as tree canopy, and a tree has a crown more than 3 m across. That way our trees mean what the map's makers meant, and we did not invent a number.
+- *Why version 1?* The bucket also holds a newer version 2, but its licence is not written down anywhere we could find, so we do not use it (rule 8 of `CLAUDE.md`).
+- *Why keep the whole canopy too?* The wind and heat physics later will treat vegetation as a porous cloud of leaves, cell by cell, and needs the full height map, small shrubs included. Single trees are for seeing, clicking, and later moving and planting.
+
+**What to understand.**
+
+- *A canopy height model* is a map of how tall the vegetation is above the ground at every point: 0 on a road, 15 at the top of a tree.
+- *Finding individual trees*:
+  1. Smooth the map a little, so its whole-metre steps do not look like peaks (A-008).
+  2. Every point that is the highest within 2 m around it is a treetop.
+  3. Grow each crown downhill from its treetop until it meets a neighbour's. This is *watershed segmentation*: turn the canopy upside down and pour water on it. The water runs into one treetop's hollow or another, and the lines where it divides are the edges between crowns.
+- *Quadkeys.* Web maps cut the world into square tiles, quartering each tile again and again. A quadkey writes the path down as digits: 0 to 3 for which quarter, one digit per level. The canopy map uses nine levels, so a tile's name is nine digits; HKU's is 132122232. We compute it from the latitude and longitude, instead of downloading a 15 MB list of tiles.
+- *Satellite images have dates.* The map shows the trees of April 2018. Trees grow, get cut down and get planted, so the date travels with the data into the viewer.
+
+**Problems and fixes.**
+
+1. *A licence we could not find.* Version 2 of the map looked better, but there is no written licence for it. We took version 1, whose licence (CC BY 4.0) is stated in the AWS registry.
+2. *Canopy inside buildings.* About 20 000 m² of the HKU map's canopy fell inside building footprints, mostly along their edges. That comes from the map and the outlines being slightly out of line, and from trees hanging over low roofs. That canopy is removed (A-007), and the summary records how many cells were removed.
+3. *A circular test.* One check compared a count with itself plus and minus the same number. It now checks that every crown became a tree and every unmatched mapped tree was kept.
+4. *Numbers from a scratch run.* The crowns' sizes were first measured in a throwaway script. They are now part of the site summary, so the journal can cite them from `results/site_hku.json`.
+
+**Next.** P1 is nearly done: a last look at the whole site, and the phase review. Then phase P2: the 3D wind solver.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -644,6 +685,10 @@ A screen pixel's number is not proportional to the light it gives. In *sRGB*, th
 ### 6.10 The shape of the ground
 
 A *digital elevation model* is a grid of ground heights. A *terrain model* (DTM) gives the bare ground; a *surface model* (DSM) gives the top of whatever is there, roofs and treetops included. Heights are measured above the *geoid*: the shape the sea's surface would have if it ran under the continents, shaped by gravity, which is close to mean sea level. Between the grid's points the ground has to be filled in; we use flat triangles, which the graphics card can draw directly and which make the ground exactly the same for the physics and for the picture.
+
+### 6.11 Trees seen from space
+
+Satellites see trees from above: a crown is a bright, textured blob, and its shadow says something about its height. A neural network trained on places where aircraft have measured the canopy with lidar (laser pulses timed from the air) learns to estimate the height of every pixel from the image alone. The result is a canopy height model: how tall the vegetation is above the ground, everywhere. From it, trees are found as peaks with crowns around them. Two limits matter: the image's date (the map can be years old) and the error (2.8 m on average for this map).
 
 (More lessons follow as the project reaches them: wall models, trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 

@@ -1,7 +1,7 @@
 {
-  "what": "site built from OpenStreetMap, Overture Maps and the GEDTM30 terrain model: a 500 m square around HKU",
+  "what": "site built from OpenStreetMap, Overture Maps, the GEDTM30 terrain model and the Meta/WRI canopy height map: a 500 m square around HKU",
   "command": "aircanopy site build --around 114.1370,22.2840,500 --name hku",
-  "run_at": "2026-10-23T10:01:21Z",
+  "run_at": "2026-10-23T10:19:48Z",
   "name": "hku",
   "bbox": [
     114.13457411746967,
@@ -34,8 +34,8 @@
   "buildings_without_height": 18,
   "estimated_from_neighbours": 41,
   "tallest_building_m": 114.0,
-  "trees": 6,
-  "trees_with_height": 0,
+  "trees": 179,
+  "trees_with_height": 174,
   "roads": 133,
   "footways": 381,
   "skipped": 10,
@@ -122,6 +122,39 @@
       "sha256": "7de3a33c1e64a50a10e39f4b176ed1949e9143aa3f03d904a0b76a606e0c2b5c",
       "licence": "CC-BY-4.0",
       "attribution": "GEDTM30 v1.2, Yufeng Ho and Tom Hengl, OpenGeoHub, doi:10.5281/zenodo.18887460"
+    },
+    {
+      "path": "meta_wri_v1_114.134574_22.281742_114.139426_22.286258.tif",
+      "url": "https://dataforgood-fb-data.s3.amazonaws.com/forests/v1/alsgedi_global_v6_float/chm/132122232.tif",
+      "accessed": "2026-10-23T10:14:17Z",
+      "bytes": 30516,
+      "sha256": "609ce823a28095eaedc64153ebd938957f482ca4b665c3a4ac6e610845cba9f7",
+      "licence": "CC-BY-4.0",
+      "attribution": "Meta and World Resources Institute (WRI) 2024, High Resolution Canopy Height Maps; source imagery © 2016 Maxar"
     }
-  ]
+  ],
+  "canopy": {
+    "file": "canopy.npz",
+    "model": "meta-wri-chm-v1",
+    "imagery_dates": [
+      "2018-04-03"
+    ],
+    "grid_m": 1.0,
+    "cover_share": 0.2008,
+    "cover_min_height_m": 5.0,
+    "cells_removed_inside_buildings": 20172,
+    "crowns": 174,
+    "mapped_matched": 1,
+    "mapped_alone": 5,
+    "crown_height_m": {
+      "min": 5.0,
+      "median": 12.0,
+      "max": 22.0
+    },
+    "crown_diameter_m": {
+      "min": 3.6,
+      "median": 15.6,
+      "max": 42.6
+    }
+  }
 }

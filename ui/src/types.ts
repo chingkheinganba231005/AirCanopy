@@ -102,6 +102,17 @@ export interface SummaryJson {
   footprint_sources?: Record<string, number>;
   overture?: { release?: string; error?: string; added?: number } | null;
   credits?: { dataset: string; credit: string; licence: string; buildings: number }[];
+  // Without the canopy map, only a note saying why.
+  canopy?: {
+    model?: string;
+    imagery_dates?: string[];
+    cover_share?: number;
+    cover_min_height_m?: number;
+    crowns?: number;
+    mapped_matched?: number;
+    mapped_alone?: number;
+    note?: string;
+  } | null;
   terrain?: {
     model: string;
     kind: string;

@@ -6,6 +6,8 @@ import {
   footprintSourceText,
   groundText,
   heightSourceText,
+  treeHeightText,
+  treesText,
   metres,
   osmUrl,
   polygonArea,
@@ -127,14 +129,7 @@ export function renderPanel(
         ...byKey("footways").map(layerRow),
         ...byKey("trees").map(layerRow),
         ...byKey("site_outline").map(layerRow),
-        summary.trees > summary.trees_with_height &&
-          h(
-            "p",
-            { class: "note" },
-            `${count(summary.trees)} trees are mapped, ${count(summary.trees_with_height)} with a ` +
-              "height. Trees without a height are not drawn yet; tree heights from satellite " +
-              "data come in a later step.",
-          ),
+        h("p", { class: "note" }, treesText(summary)),
       ),
       h(
         "section",
@@ -232,6 +227,7 @@ export function renderInfo(
       rows.push(
         row("Species", t.species ?? t.genus ?? "unknown"),
         row("Height", metres(t.height)),
+        row("Height from", treeHeightText(t.height_source, summary)),
         row("Crown width", metres(t.crown_diameter)),
         row("Trunk girth", metres(t.trunk_circumference, 2)),
         row("Leaves", [t.leaf_type, t.leaf_cycle].filter(Boolean).join(", ") || "unknown"),

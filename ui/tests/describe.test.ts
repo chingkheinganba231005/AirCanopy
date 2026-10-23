@@ -5,6 +5,8 @@ import {
   footprintSourceText,
   groundText,
   heightSourceText,
+  treeHeightText,
+  treesText,
   metres,
   osmUrl,
   polygonArea,
@@ -12,7 +14,7 @@ import {
   shortText,
   skippedByReason,
 } from "../src/describe";
-import type { Assumptions, BuildingRecord, SiteJson } from "../src/types";
+import type { Assumptions, BuildingRecord, SiteJson, SummaryJson } from "../src/types";
 
 const ASSUMPTIONS: Assumptions = {
   "A-001": { storey_height_m: 3 },
@@ -140,5 +142,41 @@ describe("ground", () => {
     );
     expect(groundText(null)).toMatch(/^Level ground/);
     expect(groundText({ ...t, model: "flat" })).toMatch(/^Level ground/);
+  });
+});
+
+describe("trees", () => {
+  const base = {
+    trees: 179,
+    trees_with_height: 174,
+    canopy: {
+      model: "meta-wri-chm-v1",
+      imagery_dates: ["2018-04-03"],
+      cover_share: 0.2008,
+      cover_min_height_m: 5,
+      crowns: 174,
+      mapped_matched: 1,
+      mapped_alone: 5,
+    },
+  } as unknown as SummaryJson;
+
+  it("says where a tree's height came from, with the date of the images", () => {
+    expect(treeHeightText("canopy:meta-wri-chm-v1", base)).toBe(
+      "estimated from the canopy height map of Meta and WRI (satellite images of 2018-04-03)",
+    );
+    expect(treeHeightText("missing", base)).toBe("unknown");
+  });
+
+  it("sums up the trees and the canopy", () => {
+    expect(treesText(base)).toBe(
+      "174 tree crowns found in the canopy height map; canopy at least 5 m tall covers 20% of " +
+        "the site. 1 of them are also mapped. 5 mapped trees stand in no crown and are drawn " +
+        "only if their height is mapped.",
+    );
+    const noMap = { ...base, canopy: { note: "trees from OpenStreetMap only" } } as SummaryJson;
+    expect(treesText(noMap)).toBe(
+      "179 trees are mapped, 174 with a height. Trees without a height are not drawn. " +
+        "Trees from OpenStreetMap only.",
+    );
   });
 });

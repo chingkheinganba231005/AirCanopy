@@ -23,6 +23,8 @@ test("opens the site and shows what it contains", async ({ page, request }) => {
   await expect(page.locator("#attribution")).toContainText("OpenStreetMap contributors");
   await expect(page.locator("#attribution")).toContainText("GEDTM30 v1.2");
   await expect(panel).toContainText("From the GEDTM30 terrain model");
+  await expect(panel).toContainText("tree crowns found in the canopy height map");
+  await expect(page.locator("#attribution")).toContainText("Canopy Height Maps");
   // Each layer's count is the number of features drawn in that group.
   const levels = summary.building_heights["osm:levels"] ?? 0;
   await expect(panel.locator('[data-layer="buildings_levels"] .num')).toHaveText(String(levels));
@@ -69,4 +71,26 @@ test("a layer can be switched off", async ({ page }) => {
   ).toBe(false);
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SCREENS}/layer-off.png` });
+});
+
+test("clicking a tree says where its height came from", async ({ page, request }) => {
+  const site = (await (await request.get("site/site.json")).json()) as SiteJson;
+  const tallest = site.trees
+    .filter((t) => t.height !== null)
+    .sort((a, b) => (b.height ?? 0) - (a.height ?? 0))[0];
+  expect(tallest).toBeDefined();
+  if (!tallest) return;
+  await open(page);
+  // Buildings can hide a tree; switch them off to reach it.
+  for (const key of ["buildings_levels", "buildings_estimated"]) {
+    await page.locator(`[data-layer="${key}"] input`).uncheck();
+  }
+  const pos = await page.evaluate((id) => window.aircanopy?.screenPositionOf(id), tallest.id);
+  expect(pos).toBeTruthy();
+  if (!pos) return;
+  await page.mouse.click(pos.x, pos.y);
+  const info = page.locator("#info");
+  await expect(info).toContainText("Tree");
+  await expect(info).toContainText("canopy height map of Meta and WRI");
+  await page.screenshot({ path: `${SCREENS}/tree.png` });
 });

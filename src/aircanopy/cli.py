@@ -62,6 +62,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="read the ground from this GeoTIFF (longitude, latitude; elevation in band 1)",
     )
+    build.add_argument(
+        "--no-canopy",
+        action="store_true",
+        help="trees from OpenStreetMap only, without the canopy height map",
+    )
+    build.add_argument(
+        "--canopy-file",
+        type=Path,
+        help="read canopy heights from this GeoTIFF instead of downloading the map",
+    )
 
     view = sub.add_parser("view", help="open a site in the 3D viewer")
     view.add_argument("site_dir", type=Path, help="a site folder made by `aircanopy site build`")
@@ -129,6 +139,8 @@ def main(argv: list[str] | None = None) -> int:
             use_overture=not args.no_overture,
             terrain_model=args.terrain,
             terrain_file=args.terrain_file,
+            use_canopy=False if args.no_canopy else None,
+            canopy_file=args.canopy_file,
         )
         shown = {k: v for k, v in summary.items() if k not in ("sources", "credits")}
         print(json.dumps(shown, indent=2))

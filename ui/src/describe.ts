@@ -129,3 +129,37 @@ export function groundText(t: SummaryJson["terrain"]): string {
   const std = t.std_mean_m !== null ? `, typically within ±${t.std_mean_m.toFixed(1)} m` : "";
   return `From ${name}: ${range}${std}.`;
 }
+
+/** Where a tree's height came from, in words. */
+export function treeHeightText(source: string, summary: SummaryJson): string {
+  if (source === "canopy:meta-wri-chm-v1") {
+    const dates = summary.canopy?.imagery_dates ?? [];
+    const when = dates.length ? ` (satellite images of ${dates.join(", ")})` : "";
+    return `estimated from the canopy height map of Meta and WRI${when}`;
+  }
+  if (source === "osm:height") return "mapped (OpenStreetMap height tag)";
+  if (source === "missing") return "unknown";
+  return source;
+}
+
+/** What the site's trees are made of, in one or two sentences. */
+export function treesText(summary: SummaryJson): string {
+  const c = summary.canopy;
+  if (c?.crowns === undefined) {
+    return (
+      `${count(summary.trees)} trees are mapped, ${count(summary.trees_with_height)} with a ` +
+      "height. Trees without a height are not drawn." +
+      (c?.note ? ` ${c.note[0]?.toUpperCase()}${c.note.slice(1)}.` : "")
+    );
+  }
+  const share = Math.round((c.cover_share ?? 0) * 100);
+  let text =
+    `${count(c.crowns)} tree crowns found in the canopy height map; canopy at least ` +
+    `${c.cover_min_height_m ?? ""} m tall covers ${share}% of the site.`;
+  if (c.mapped_matched) text += ` ${count(c.mapped_matched)} of them are also mapped.`;
+  if (c.mapped_alone) {
+    text += ` ${count(c.mapped_alone)} mapped trees stand in no crown`;
+    text += " and are drawn only if their height is mapped.";
+  }
+  return text;
+}

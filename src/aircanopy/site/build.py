@@ -9,11 +9,13 @@ A site folder holds:
   machine-learning estimate, from neighbours), and the data sources with their licences and the
   credit each dataset asks for.
 
-- `terrain.npz`: the ground (site/terrain.py), over the site and its surroundings.
+- `terrain.npz`: the ground (site/terrain.py), over the site and its surroundings;
+- `canopy.npz`: the height of the vegetation on a 1 m grid (site/canopy.py).
 
 Buildings come from OpenStreetMap, joined with Overture Maps when the data are downloaded
-(site/from_overture.py). The ground comes from an elevation model (sources/terrain.py). If a
-second source cannot be reached, the site is built without it and the summary says so.
+(site/from_overture.py). The ground comes from an elevation model (sources/terrain.py), and the
+trees from the canopy height map (sources/canopy.py) joined with the trees in OpenStreetMap. If
+a second source cannot be reached, the site is built without it and the summary says so.
 """
 
 from __future__ import annotations
@@ -23,13 +25,18 @@ import urllib.error
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
 import pyarrow as pa
 import rasterio.errors
 
 from ..geo import BBox, LocalFrame
+from ..sources import canopy as canopy_map
 from ..sources import osm, overture
 from ..sources import terrain as elevation
 from ..sources.cache import sha256_file
+from .canopy import SOURCE as CANOPY_SOURCE
+from .canopy import TREE_CANOPY_MIN_M, Canopy, remove_buildings, trees_from_canopy
+from .canopy import from_geotiff as canopy_from_geotiff
 from .fill import MIN_NEIGHBOURS, NEIGHBOUR_MEDIAN, NEIGHBOUR_RADIUS_M, fill_building_heights
 from .from_osm import site_from_osm
 from .from_overture import join_overture
@@ -120,6 +127,14 @@ def summarise(
     }
 
 
+def _spread(values: np.ndarray) -> dict | None:
+    """Smallest, median and largest of a set of values, rounded to 0.1."""
+    if not len(values):
+        return None
+    lo, mid, hi = np.min(values), np.median(values), np.max(values)
+    return {"min": round(float(lo), 1), "median": round(float(mid), 1), "max": round(float(hi), 1)}
+
+
 def build_from_osm_data(
     name: str,
     bbox: BBox,
@@ -131,12 +146,34 @@ def build_from_osm_data(
     overture_status: dict | None = None,
     terrain: Terrain | None = None,
     terrain_note: str | None = None,
+    canopy: Canopy | None = None,
+    canopy_note: str | None = None,
 ) -> dict:
     site = site_from_osm(name, bbox, data, sources)
     if overture_table is not None:
         report = join_overture(site, overture_table, (overture_status or {}).get("release"))
         overture_status = {**(overture_status or {}), **report.to_dict()}
     fill_building_heights(site)
+    canopy_status: dict = {"note": canopy_note} if canopy_note else {}
+    if canopy is not None:
+        removed = remove_buildings(canopy, site.buildings)
+        site.trees, counts = trees_from_canopy(canopy, site.trees)
+        crowns = [t for t in site.trees if t.crown_source == CANOPY_SOURCE]
+        heights = np.array([t.height for t in crowns], dtype=float)
+        widths = np.array([t.crown_diameter for t in crowns], dtype=float)
+        canopy_status = {
+            "file": "canopy.npz",
+            "model": "meta-wri-chm-v1",
+            "imagery_dates": canopy.imagery_dates,
+            "grid_m": canopy.dx,
+            "cover_share": round(canopy.cover(TREE_CANOPY_MIN_M), 4),
+            "cover_min_height_m": TREE_CANOPY_MIN_M,
+            "cells_removed_inside_buildings": removed,
+            **counts,
+            "crown_height_m": _spread(heights),
+            "crown_diameter_m": _spread(widths),
+            **canopy_status,
+        }
     terrain = terrain or flat(site.extent(), TERRAIN_DX_M)
     for b in site.buildings:
         b.ground = terrain.lowest_under(b.footprint)
@@ -148,6 +185,8 @@ def build_from_osm_data(
     out.mkdir(parents=True, exist_ok=True)
     site.save(out / "site.json")
     terrain.save(out / "terrain.npz")
+    if canopy is not None:
+        canopy.save(out / "canopy.npz")
     export_glb(site, out / "scene.glb", terrain)
     grid = grid_for_site(site, dx, terrain=terrain)
     solid = voxelise(site, grid, terrain)
@@ -160,6 +199,7 @@ def build_from_osm_data(
         overture_status,
         int((solid == GROUND).sum()),
     )
+    summary["canopy"] = canopy_status or None
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     return summary
 
@@ -215,6 +255,35 @@ def load_terrain(
     return t, got.record(), note
 
 
+def load_canopy(
+    bbox: BBox,
+    frame: LocalFrame,
+    extent: tuple[float, float, float, float],
+    use_canopy: bool = True,
+    canopy_file: Path | None = None,
+    refresh: bool = False,
+) -> tuple[Canopy | None, dict | None, str | None]:
+    """(canopy, source record, note); canopy None means trees from OpenStreetMap only."""
+    if canopy_file is not None:
+        c = canopy_from_geotiff(canopy_file, frame, extent)
+        record = {
+            "path": str(canopy_file),
+            "bytes": canopy_file.stat().st_size,
+            "sha256": sha256_file(canopy_file),
+            "licence": canopy_map.LICENCE,
+            "attribution": canopy_map.ATTRIBUTION,
+            "note": "local copy of the canopy height map supplied by the user",
+        }
+        return c, record, None
+    if not use_canopy:
+        return None, None, "trees from OpenStreetMap only: the canopy height map was not used"
+    try:
+        got = canopy_map.fetch_canopy(bbox, refresh=refresh)
+    except _NETWORK_ERRORS as e:
+        return None, None, f"trees from OpenStreetMap only: the canopy map could not be read ({e})"
+    return canopy_from_geotiff(got.path, frame, extent), got.record(), None
+
+
 def build_site(
     name: str,
     bbox: BBox | None,
@@ -225,6 +294,8 @@ def build_site(
     use_overture: bool = True,
     terrain_model: str | None = None,
     terrain_file: Path | None = None,
+    use_canopy: bool | None = None,
+    canopy_file: Path | None = None,
 ) -> dict:
     """Build the site folder.
 
@@ -236,6 +307,9 @@ def build_site(
     The ground comes from `terrain_model` ("gedtm30", "copernicus" or "flat"; by default
     GEDTM30 when downloading and level ground with an OpenStreetMap file), or from
     `terrain_file`, a GeoTIFF in longitude and latitude with elevation in band 1.
+
+    Trees come from the canopy height map when downloading (unless `use_canopy` is False) or
+    from `canopy_file`, joined with the trees in OpenStreetMap.
     """
     if osm_file is None:
         if bbox is None:
@@ -258,7 +332,15 @@ def build_site(
         )
         if record:
             records.append(record)
-        return build_from_osm_data(name, bbox, data, out, dx, records, table, status, terrain, note)
+        frame = LocalFrame.for_bbox(bbox)
+        canopy, c_record, c_note = load_canopy(
+            bbox, frame, frame.bbox_extent(bbox), use_canopy is not False, canopy_file, refresh
+        )
+        if c_record:
+            records.append(c_record)
+        return build_from_osm_data(
+            name, bbox, data, out, dx, records, table, status, terrain, note, canopy, c_note
+        )
     data = osm.parse(osm_file)
     bbox = bbox or data.bounds
     if bbox is None:
@@ -276,4 +358,12 @@ def build_site(
     terrain, record, note = load_terrain(bbox, terrain_model or "flat", terrain_file, refresh)
     if record:
         records.append(record)
-    return build_from_osm_data(name, bbox, data, out, dx, records, None, None, terrain, note)
+    frame = LocalFrame.for_bbox(bbox)
+    canopy, c_record, c_note = load_canopy(
+        bbox, frame, frame.bbox_extent(bbox), bool(use_canopy), canopy_file, refresh
+    )
+    if c_record:
+        records.append(c_record)
+    return build_from_osm_data(
+        name, bbox, data, out, dx, records, None, None, terrain, note, canopy, c_note
+    )
