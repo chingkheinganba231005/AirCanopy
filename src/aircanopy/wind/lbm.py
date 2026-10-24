@@ -196,23 +196,37 @@ def _axis_factors(u):
 def product_terms(xp, lat: VelocitySet, rho, u, p=None, force=None):
     """The extended equilibrium rho phi_x phi_y phi_z, and, if given, the non-equilibrium part
     rebuilt from the flux p (PAIRS order) and the force term F . grad_u(phi_x phi_y phi_z), each
-    of shape (Q, ...). D3Q27 only; None for the parts not asked for."""
+    of shape (Q, ...). D3Q27 only; None for the parts not asked for.
+
+    The nine directions that share (c_y, c_z) share most of the work: each part is a sum of
+    phi_x, phi'_x and phi''_x / 2, each times a factor that depends on y and z only, computed
+    once for the nine."""
     fx, fy, fz = (_axis_factors(u[a]) for a in range(3))
-    eq, neq, src = [], [], []
-    for cx, cy, cz in ((int(a), int(b), int(c)) for a, b, c in lat.c):
-        px, py, pz = fx[0][cx], fy[0][cy], fz[0][cz]
+    eq, neq, src = {}, {}, {}
+    for cy, cz in itertools.product((-1, 0, 1), repeat=2):
+        py, pz = fy[0][cy], fz[0][cz]
+        dy, dz = fy[1][cy], fz[1][cz]
         yz = py * pz
-        eq.append(rho * px * yz)
+        rho_yz = rho * yz
         if p is not None:
-            dx, dy, dz = fx[1][cx], fy[1][cy], fz[1][cz]
-            hx, hy, hz = fx[2][cx], fy[2][cy], fz[2][cz]
-            diagonal = hx * p[0] * yz + hy * p[1] * px * pz + hz * p[2] * px * py
-            neq.append(diagonal + p[3] * dx * dy * pz + p[4] * dx * py * dz + p[5] * px * dy * dz)
+            # f_neq = phi_x (...) + phi'_x (...) + (phi''_x / 2) (...), from the module docstring.
+            times_phi = fy[2][cy] * p[1] * pz + fz[2][cz] * p[2] * py + p[5] * dy * dz
+            times_d1 = p[3] * dy * pz + p[4] * py * dz
+            times_half_d2 = p[0] * yz
         if force is not None:
-            dx, dy, dz = fx[1][cx], fy[1][cy], fz[1][cz]
-            src.append(force[0] * dx * yz + force[1] * px * dy * pz + force[2] * px * py * dz)
-    return (xp.stack(eq), xp.stack(neq) if p is not None else None,
-            xp.stack(src) if force is not None else None)  # fmt: skip
+            src_phi = force[1] * dy * pz + force[2] * py * dz
+            src_d1 = force[0] * yz
+        for cx in (-1, 0, 1):
+            px, dx = fx[0][cx], fx[1][cx]
+            eq[cx, cy, cz] = px * rho_yz
+            if p is not None:
+                neq[cx, cy, cz] = px * times_phi + dx * times_d1 + fx[2][cx] * times_half_d2
+            if force is not None:
+                src[cx, cy, cz] = px * src_phi + dx * src_d1
+    order = [(int(a), int(b), int(c)) for a, b, c in lat.c]
+    return (xp.stack([eq[k] for k in order]),
+            xp.stack([neq[k] for k in order]) if p is not None else None,
+            xp.stack([src[k] for k in order]) if force is not None else None)  # fmt: skip
 
 
 @functools.cache

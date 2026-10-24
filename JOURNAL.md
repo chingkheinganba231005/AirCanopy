@@ -242,10 +242,10 @@ P1 is done: its exit check is met (Step 9).
 **How it will work.**
 
 - *Method.* The lattice Boltzmann method ([6.4](#64-the-lattice-boltzmann-method)) with large-eddy simulation ([6.3](#63-turbulence-and-large-eddy-simulation-les)), in JAX, written by us (D-015). Each step is written once against an "array module", so it runs with NumPy (slow, easy to inspect) or with JAX (compiled for the processor or the graphics card). The two must agree to round-off, as they did in Trees vs Breath.
-- *What comes from Trees vs Breath*, where it was tested in 2D: the regularised collision (Latt and Chopard 2006), which stays stable when the viscosity is tiny; the Smagorinsky turbulence model with the strain rate read from the packets themselves, without finite differences; the Guo forcing for body forces; the implicit drag of porous crowns (needed in P3); absorbing layers that stop sound waves bouncing between the boundaries; and streaming built from array shifts, because gathers are slow on processors. Each piece is ported to 3D with its tests.
+- *What comes from Trees vs Breath*, where it was tested in 2D: the regularised collision (Latt and Chopard 2006), which stays stable when the viscosity is tiny (in 3D, in a fast wind, it does not: Step 12 replaced it with the recursive collision); the Smagorinsky turbulence model with the strain rate read from the packets themselves, without finite differences; the Guo forcing for body forces; the implicit drag of porous crowns (needed in P3); absorbing layers that stop sound waves bouncing between the boundaries; and streaming built from array shifts, because gathers are slow on processors. Each piece is ported to 3D with its tests.
 - *Why 3D changes the physics, not only the picture.* In two dimensions turbulence passes energy to ever larger eddies instead of breaking them into smaller ones (Kraichnan 1967). A 2D model therefore gets the mixing in a street wrong in kind, not just in amount.
 - *Real scale.* With 2 m cells, the viscosity of air is far too small to matter for the eddies the grid can see. What matters is the turbulence model, and the thin layer of air against every surface, which no city-scale grid can resolve. So walls get a *wall model*: the law of the wall for rough surfaces gives the friction from the wind speed in the first cell and the surface's roughness length. This is where the real Reynolds number enters the simulation.
-- *Lattice.* D3Q19 (19 directions per cell) needs about 30 % less memory than D3Q27 (27 directions); D3Q27 treats all directions more evenly, which matters for some collision models in strong turbulence. Both will be written; the tests and the speed measurement decide.
+- *Lattice.* D3Q19 (19 directions per cell) needs about 30 % less memory than D3Q27 (27 directions); D3Q27 treats all directions more evenly, which matters for some collision models in strong turbulence. Both will be written; the tests and the speed measurement decide. (They did, in Step 12: only D3Q27 holds the recursive collision, the one that stays stable, D-018.)
 - *Wind direction.* The site is turned so that the wind always blows along the grid's x axis, and the buildings are put into voxels in the turned frame.
 - *Units.* The solver works in lattice units (cell size 1, time step 1). A small module converts metres and seconds, and refuses settings that break the method's limits, such as a flow too fast for the lattice (Krüger et al. 2017).
 
@@ -270,7 +270,9 @@ P1 is done: its exit check is met (Step 9).
 
 - [ ] Open boundaries: velocity inlet, outflow, absorbing layers
 - [x] Wall model for rough surfaces (law of the wall with a roughness length): free-slip floors and a drag in the first cell of air (Step 11)
-- [ ] A neutral atmospheric boundary layer over rough ground: the mean wind follows the logarithmic law and stays the same along the domain (first runs in Step 11: mixed results, and numerical noise near the lid, Step 12)
+- [x] A neutral atmospheric boundary layer over rough ground, in a box that repeats sideways: the mean wind follows the logarithmic law (Step 11: mixed results and numerical noise; Step 12: passes with the recursive collision and the wall model reading at 0.2 δ, fails when it reads the first cell)
+- [ ] The same boundary layer with open boundaries: it stays the same along the domain
+- [ ] The wall model among buildings: where to read the wind when the law of the wall does not reach 0.2 δ above a street (D-019)
 - [ ] Turbulent inflow for real sites (a separate run of the boundary layer feeding the inlet, or synthetic eddies), chosen by test
 
 *Validation, and a first real run on a graphics card*
@@ -1037,6 +1039,84 @@ So the boundary-layer item in Part 4 stays open: the averages above are a record
 
 **Next.** Find the source of the noise before anything else, because every later run, the cube's and the city's, has fast wind and almost no viscosity. Then the cube on the floor of a channel. Its walls are smooth, and the layer in which the wind slows to zero against them is very thin. Near the floor, the measured shear stress upstream of the cube is about 0.0023 Ub² (ERCOFTAC case 041, x/H = −18), a friction velocity of about 0.05 Ub. At the experiment's Reynolds number, that makes the layer's thickness scale ν/u* about H/2000, so resolving it would take thousands of cells across the channel. Instead, the channel's wall friction will be matched to the measured profile upstream of the cube, and the flow around and behind the cube is what will be judged.
 
+### 2026-10-24 · Step 12 · Noise one cell long, a steadier collision, and a wall model that reads higher up
+
+**Goal.** Find where the noise near the lid came from (Step 11), remove it, and run the boundary layer again.
+
+**Strip the problem to its core.** If the noise comes from the numerical method, it should appear without any of the boundary layer's physics. So the test is a uniform wind in a box that repeats in every direction, with tiny random noise added (10⁻⁴ cells per step, about a thousandth of the wind), almost no viscosity, and no turbulence model ([6.16](#616-when-an-error-feeds-itself-numerical-stability)). Nothing in the physics makes such noise grow. With the regularised collision it grew until the run failed. So the collision itself amplifies short waves when the wind is fast and the viscosity tiny. In the boundary layer, the Smagorinsky model adds viscosity wherever the air is sheared, which held the noise down where the air is strongly sheared, a few cells above the floor; under the lid the air is barely sheared, and the noise filled it.
+
+This contradicts the plan in Part 4, which said the regularised collision "stays stable when the viscosity is tiny". That was learned in 2D, in Trees vs Breath. In 3D, in a fast wind, it does not hold.
+
+**What the literature says.** Coreixas, Wissocq, Chopard and Latt (2020) compared collision models for exactly this case: air-like flow at almost zero viscosity, in a wind that is not slow compared with the speed of sound. BGK-based collisions "suffer from stability issues ... especially in the zero viscosity limit and for non-vanishing Mach numbers"; of the models they compared, the recursive regularised collision was among "the best candidates for the simulation of isothermal flows in the zero-viscosity limit". Malaspinas (2015) introduced it. Its 3D form needs D3Q27, because only D3Q27's complete set of 27 basis vectors "can be expressed in Hermite polynomials"; D3Q19's cannot ([6.17](#617-the-collision-step-three-ways)).
+
+**The recursive collision.** Two things change. The equilibrium becomes the *extended* one. On D3Q27 it is a product of one factor per direction, φ(c_x, u_x) φ(c_y, u_y) φ(c_z, u_z), with φ(0, u) = 2/3 − u² and φ(±1, u) = (1/3 ± u + u²)/2 (Coreixas, Chopard and Latt 2019, Eqs. H7–H14). Unlike the usual one, it has the right third moments, those of a real gas; a test checks this. And the non-equilibrium part is rebuilt at every order D3Q27 can hold, from the stress and the velocity, with the paper's recursive formulas (their Eq. 89). Written out, that rebuild turns out to be a sum of products of the derivatives of the same three factors, which makes it short and cheap. `wind/lbm.py` builds it twice: once from the 27 Hermite coefficients one by one, as the paper writes it, and once in the product form that the solver runs. A test checks that the two agree to 10⁻¹⁴.
+
+**The test, recorded** (`benchmarks/wind_stability.py`, `results/wind_stability_cpu.json`). A box of 32³ cells, 20,000 steps. The criterion was written before the benchmark's first run: a collision is stable in a case if the run stays finite and the noise never rises above its start.
+
+| Lattice and collision | Wind along x | Along the xy diagonal | Along the box diagonal |
+| --- | --- | --- | --- |
+| D3Q19, regularised | fails by step 2,000 | fails by step 2,000 | fails by step 2,000 |
+| D3Q19, BGK | fails by step 4,000 | fails by step 14,000 | fails by step 4,000 |
+| D3Q27, regularised | fails by step 2,000 | fails by step 2,000 | fails by step 4,000 |
+| D3Q27, BGK | fails by step 14,000 | fails by step 6,000 | fails by step 6,000 |
+| **D3Q27, recursive** | **stable: 0.9 % of the start** | **stable: 0.6 %** | **stable: 0.5 %** |
+
+All at Mach 0.17, the fastest wind A-009 allows. The recursive collision is still stable at Mach 0.25, in all three directions. A slower wind does not rescue D3Q19's regularised collision: at Mach 0.06 it still fails, by step 8,000 to 12,000; BGK holds there. Four candidates were tried and not adopted. The recursive collision written for D3Q19, from the raw moments that lattice can hold (Coreixas et al. 2019, App. G), fails by step 2,000. BGK with the extended equilibrium holds along x and the box diagonal but its noise grows along the xy diagonal. The regularised collision with the extended equilibrium fails. The recursive collision built from the trace-free stress holds, like the one adopted.
+
+![Noise energy against time steps for each collision, on D3Q19 and D3Q27](docs/images/wind_stability.png)
+
+*For each collision, the wind direction in which it fared worst. A cross marks the check by which the numbers had overflowed. Only the recursive collision on D3Q27 holds; it removes 99 % of the noise. Simulated.*
+
+**What it costs.** On this processor (`results/wind_speed_cpu.json`), a step of D3Q27 with the recursive collision makes 11.6 million cell updates per second in 32-bit numbers, against 27.7 for D3Q27 with the regularised collision and 36.6 for D3Q19 with the regularised one, measured in the same run. So it costs about three times as much per cell. Rewriting the product form so that the nine directions sharing (c_y, c_z) share their work did not change that, probably because the compiler had already merged the repeated products; it still saves work when the step runs in NumPy, as in the tests. A graphics card is limited more by moving data than by arithmetic, so it may show a smaller gap; the Colab notebook measures it.
+
+**Exact answers, again.** With the recursive collision, the shear wave and Poiseuille flow have exactly the errors of the regularised collision and converge at second order. The Taylor–Green vortex passes its criteria at the reduced speeds and shows the same compressibility at the planned speed as every other collision (`results/wind_exact.json`). At Reynolds number 1600 on 64³ cells, its peak dissipation is 3.6 % below the reference and 0.7 time units early; the regularised collision on D3Q19 was 5.7 % low and 0.1 early (`results/wind_tgv1600_cpu.json`). The test that counts is still 256³ on a graphics card; the notebook now runs it with the recursive collision.
+
+**The boundary layer again: the noise is gone.** The same box as in Step 11, now on D3Q27 with the recursive collision. Every run now also records how much of the vertical wind is noise at the scale of the grid, and whether the column's mean wind has settled. The old run (D3Q19, regularised, Cs = 0.1) was run again to measure its noise; it reproduced its Step 11 numbers to the last digit.
+
+![The share of the vertical wind's variance in waves shorter than 4 cells, and the correlation between neighbouring cells, by height, before and after](docs/images/wind_abl_noise.png)
+
+*Before (orange), waves shorter than 4 cells carried up to 97 % of the vertical wind's variance under the lid, and neighbouring cells moved in opposite directions. After (blue), they carry at most 0.4 %, at every height. Simulated.*
+
+The runs also settled: during the averaging, the column's mean wind varied by at most 0.35 u*, out of about 15 u*.
+
+**The log-layer mismatch.** The mean wind was now too fast instead of too slow (`results/wind_abl_cpu.json`):
+
+| Wall model reads | Cs | Friction ÷ push | 1. Balance (2 %) | Worst in the surface layer | 2. Law of the wall (10 %) |
+| --- | --- | --- | --- | --- | --- |
+| the first cell | 0.10 | 1.008 | pass | 1.188 | **fail** |
+| the first cell | 0.17 | 0.982 | pass | 1.133 | **fail** |
+| 6.5 cells up (0.2 δ) | 0.10 | 1.011 | pass | 1.025 | pass |
+| 6.5 cells up (0.2 δ) | 0.17 | 0.994 | pass | 0.967 | pass |
+| 3.5 cells up | 0.17 | 1.039 | **fail** | 0.986 | pass |
+
+Fed from the first cell, the scaled shear jumps to 1.3–1.9 one to two cells above the floor: the "overshoot" that Step 11 expected from the literature and did not find, probably because the noise was mixing the air near the floor. Larsson, Kawai, Bodart and Bermejo-Moreno (2016) explain it in a review that is open to read. A large-eddy simulation "is inevitably plagued by numerical and subgrid-modeling errors in the first few grid points off the wall": the eddies that carry momentum near a wall grow in proportion to their height above it, so in the first cells they are smaller than the cells. A wall model fed from those cells passes their error on. The mean wind then runs parallel to the law of the wall but shifted from it, too fast in some codes and too slow in others, and the friction it predicts is wrong by 10 to 15 % (Kawai and Larsson 2012). The review notes that codes like ours (all values at the same points, some numerical damping) usually run too fast.
+
+The first cell itself is 6 % slow, and now the reason can be checked with recorded numbers. The friction is applied to the wind of each moment, and gusts make the average of |U| u larger than the square of the average wind, by a *gust factor* of 1.10 to 1.14 in these runs. The balance fixes the average friction, so the average wind in the first cell must be √(balance ÷ gust factor) of the law: 0.942 and 0.944, against 0.938 and 0.941 measured (and 0.959 against 0.958 for the old run).
+
+**Reading the wind higher up.** The remedy, from Kawai and Larsson (2012) as the review describes it: read the wind at a height h_wm chosen for the flow, not for the grid, with cells fine enough there. "The 'ideal' thickness of the wall-modeled layer is hwm ≈ 0.2δ", where δ is the depth of the boundary layer. The model then reads the wind at h_wm, works out the friction from the law of the wall at that height, and applies it to the first cell (`walls.matched_floor_drag`, A-011). Before the first run, the height was fixed at 0.2 δ = 6.4 cells for this 32-cell box, read at the nearest cell centre, 6.5 cells; the review reports that one code needed cells no taller than 0.3 h_wm, and ours are 0.15 h_wm. One more run reads at 3.5 cells, to show how the answer depends on the height. The criteria stayed the same.
+
+Read at 6.5 cells, both runs pass both criteria (the table above). With Cs = 0.17, the mean wind stays within 3.3 % of the law of the wall from 2 cells above the floor up to the lid, and the scaled shear between 3 and 10 cells up is between 0.95 and 1.06, where it had reached 1.9. With Cs = 0.1, the wind stays within 3.4 %. Only the first cell or two stay slow: by 13 and 10 % with Cs = 0.17, and by 11 and 1 % with Cs = 0.1, the "first few grid points" the review warns about. The gusts matter less at 6.5 cells: the gust factor there is 1.03.
+
+Read at 3.5 cells, the wind was within 1.4 % of the law in the surface layer, but the run had not settled: the column's mean wind fell by 0.36 u* during the averaging, so it fails criterion 1. A longer run would be needed to judge that height.
+
+![Mean wind and scaled shear for the old collision, the new one, and the new one with the wall model reading higher up](docs/images/wind_abl_wall_model.png)
+
+*All with Cs = 0.17 on 32 cells. Read from the first cell, the old collision's wind is too slow (orange) and the new one's too fast (blue). Read at 6.5 cells (aqua), the new one follows the law of the wall from 2 cells up to the lid. The run read at 3.5 cells (violet) had not yet settled. Dotted lines: where the wall model reads. Simulated.*
+
+One caution for later. Over a street between tall buildings, the wind 0.2 δ above the street may be above the roofs, where the law of the wall says nothing about the street's friction. So among buildings the wall model still reads the first cell for now (D-019), and finding a rule there is a new item in Part 4.
+
+**Decisions.** D-018: the solver uses D3Q27 with the recursive collision by default (replacing D-016). D-019: over flat, open ground, the wall model reads the wind at 0.2 δ.
+
+**Problems and fixes.**
+
+- The search for the cause started in a scratch folder, with a copy of the collision patched in for each candidate. One candidate, plain BGK, called the patched function, which was itself, and failed at once. The benchmark now builds every candidate on its own instead of patching the solver.
+- `pkill -f` with a pattern that also appeared in its own command line stopped the shell that ran it.
+- The cloud container was paused for four hours in the middle of a queue of runs. The runs were lost, but every finished one had already written its results, and the queue was restarted from its log.
+- After the pause, the same step ran twice as fast as in Step 10, on a machine that also reports 4 cores. Speeds are therefore compared only within one run of the speed benchmark.
+- In the first draft of the boundary-layer picture for this step, the legend covered the lines; it moved to empty corners.
+
+**Next.** Open boundaries: an inlet fed from a boundary layer like this one, an outflow, and absorbing layers that keep eddies and sound from bouncing back. With them, the last boundary-layer item in Part 4 can be tested: whether the wind stays the same along a domain. Then the cube's approach channel and the cube, which need the graphics card. The notebook for the graphics card is ready, now with the recursive collision; its first run (Part 4) still waits for you.
+
 ---
 
 ## Part 6 — Concepts explained simply
@@ -1176,8 +1256,10 @@ In each cell the collision nudges the packets towards a balanced mix, the *equil
 | D-013 | A place found by name is never used silently: every candidate is listed, the one used is marked, and the name typed, the pick and the place are stored with the site | Names are ambiguous: "University of Hong Kong" found a restaurant in Germany. A silent wrong pick would build the wrong place |
 | D-014 | Storeys are counted from the ground, as the OpenStreetMap wiki defines `building:levels`, also for towers tagged with the undocumented `location=podium`; the site review counts those towers | The documented rule is the only one others can check; counting the cases shows how much depends on it |
 | D-015 | The wind solver is our own, in JAX, ported piece by piece from the tested 2D solver of Trees vs Breath; existing libraries such as XLB are used only to compare results and speed | The later phases put their own physics inside the same step (porous crowns, wall models, pollutants, heat and buoyancy); a step written once for NumPy and JAX can be checked line by line; and the owner wants to learn how a solver works |
-| D-016 | The wind solver uses D3Q19 by default; D3Q27 stays available and is compared again in turbulent flows | In the three exact tests D3Q27 was no more accurate and was a third to a half slower; the literature reports that the choice matters in turbulent flows (White and Chong 2011), so the question stays open until those tests |
+| D-016 | The wind solver uses D3Q19 by default; D3Q27 stays available and is compared again in turbulent flows (replaced by D-018) | In the three exact tests D3Q27 was no more accurate and was a third to a half slower; the literature reports that the choice matters in turbulent flows (White and Chong 2011), so the question stays open until those tests |
 | D-017 | D-009 is applied by the tool: uv ignores every release published after the date in `pyproject.toml` (`exclude-newer`), which is moved forward on purpose; npm packages are checked by script | A rule kept by memory failed: Pillow 13.0, a week old, came in unnoticed with another package |
+| D-018 | The wind solver uses D3Q27 with the recursive regularised collision by default; D3Q19 and the regularised and BGK collisions stay available for comparison | In a uniform wind with almost no viscosity, tiny noise grew until the run failed with every collision on D3Q19 and with the regularised and BGK collisions on D3Q27, in every direction; only the recursive collision on D3Q27 damped it, at Mach 0.17 and 0.25 (Step 12). It costs more per cell than D3Q19's step, which the graphics card will measure; a step that fails costs everything |
+| D-019 | Over flat, open ground, and in the boundary layer that feeds a site, the floors' wall model reads the wind at 0.2 times the depth of the boundary layer (A-011); among buildings it still reads the first cell, until a test decides | Read from the first cell, the mean wind missed the law of the wall by 10 to 19 %; read at 0.2 δ, a height taken from the literature before the run, it stayed within 3.3 % (Step 12). Among buildings the law of the wall may not hold that high above a street |
 | D-009 | Every package version is pinned exactly, and new versions are taken only after they have been out for about two weeks, unless a fix is needed | A build that worked keeps working; very new releases are where most broken or malicious packages are caught |
 
 ---

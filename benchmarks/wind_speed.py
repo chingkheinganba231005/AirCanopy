@@ -99,6 +99,18 @@ def copy_time(lat, dtype, n: int, repeats: int = 20) -> float:
     return (time.perf_counter() - start) / repeats
 
 
+def processor_model() -> str | None:
+    """The processor's name from /proc/cpuinfo (Linux), or None. Two machines with the same
+    number of cores can differ twofold in speed (Step 12), so the name is recorded too."""
+    try:
+        for line in Path("/proc/cpuinfo").read_text().splitlines():
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
 def main(n: int = 64, steps: int = 200) -> None:
     device = jax.devices()[0]
     kinds = ((D3Q19, "regularised"), (D3Q27, "regularised"), (D3Q27, "recursive"))
@@ -114,7 +126,8 @@ def main(n: int = 64, steps: int = 200) -> None:
     for r in runs:
         r.update(run_at=run_at, aircanopy=__version__, jax=jax.__version__)
         r["device"] = {"platform": device.platform, "kind": device.device_kind}
-        r["machine"] = {"cpus": os.cpu_count(), "system": platform.system()}
+        r["machine"] = {"cpus": os.cpu_count(), "system": platform.system(),
+                        "processor": processor_model()}  # fmt: skip
     path = ROOT / "results" / f"wind_speed_{device.platform}.json"
     key = lambda r: (r["lattice"], r["dtype"], r["collision"], r["form"], r["cells"])  # noqa: E731
     old = json.loads(path.read_text())["runs"] if path.is_file() else []

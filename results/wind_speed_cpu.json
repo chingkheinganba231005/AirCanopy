@@ -8,14 +8,14 @@
       "form": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 1.6,
-      "mlups": 32.76,
-      "first_call_seconds": 1.82,
+      "seconds": 1.432,
+      "mlups": 36.6,
+      "first_call_seconds": 1.66,
       "population_bytes_per_cell": 76,
       "finite": true,
-      "copy_seconds": 0.00101,
-      "step_seconds": 0.008,
-      "run_at": "2026-10-23T23:40:10Z",
+      "copy_seconds": 0.00103,
+      "step_seconds": 0.00716,
+      "run_at": "2026-10-24T00:31:01Z",
       "aircanopy": "0.1.0",
       "jax": "0.11.2",
       "device": {
@@ -24,7 +24,8 @@
       },
       "machine": {
         "cpus": 4,
-        "system": "Linux"
+        "system": "Linux",
+        "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz"
       }
     },
     {
@@ -34,14 +35,14 @@
       "form": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 3.183,
-      "mlups": 16.47,
-      "first_call_seconds": 1.99,
+      "seconds": 3.103,
+      "mlups": 16.9,
+      "first_call_seconds": 1.71,
       "population_bytes_per_cell": 152,
       "finite": true,
-      "copy_seconds": 0.00451,
-      "step_seconds": 0.01591,
-      "run_at": "2026-10-23T23:40:10Z",
+      "copy_seconds": 0.00529,
+      "step_seconds": 0.01552,
+      "run_at": "2026-10-24T00:31:01Z",
       "aircanopy": "0.1.0",
       "jax": "0.11.2",
       "device": {
@@ -50,7 +51,8 @@
       },
       "machine": {
         "cpus": 4,
-        "system": "Linux"
+        "system": "Linux",
+        "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz"
       }
     },
     {
@@ -60,14 +62,14 @@
       "form": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 2.078,
-      "mlups": 25.23,
-      "first_call_seconds": 2.6,
+      "seconds": 1.894,
+      "mlups": 27.68,
+      "first_call_seconds": 2.63,
       "population_bytes_per_cell": 108,
       "finite": true,
-      "copy_seconds": 0.00329,
-      "step_seconds": 0.01039,
-      "run_at": "2026-10-23T23:40:10Z",
+      "copy_seconds": 0.002,
+      "step_seconds": 0.00947,
+      "run_at": "2026-10-24T00:31:01Z",
       "aircanopy": "0.1.0",
       "jax": "0.11.2",
       "device": {
@@ -76,7 +78,8 @@
       },
       "machine": {
         "cpus": 4,
-        "system": "Linux"
+        "system": "Linux",
+        "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz"
       }
     },
     {
@@ -86,14 +89,14 @@
       "form": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 4.358,
-      "mlups": 12.03,
-      "first_call_seconds": 2.95,
+      "seconds": 4.488,
+      "mlups": 11.68,
+      "first_call_seconds": 2.65,
       "population_bytes_per_cell": 216,
       "finite": true,
-      "copy_seconds": 0.00656,
-      "step_seconds": 0.02179,
-      "run_at": "2026-10-23T23:40:10Z",
+      "copy_seconds": 0.01086,
+      "step_seconds": 0.02244,
+      "run_at": "2026-10-24T00:31:01Z",
       "aircanopy": "0.1.0",
       "jax": "0.11.2",
       "device": {
@@ -102,7 +105,8 @@
       },
       "machine": {
         "cpus": 4,
-        "system": "Linux"
+        "system": "Linux",
+        "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz"
       }
     },
     {
@@ -112,14 +116,14 @@
       "form": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 4.51,
-      "mlups": 11.62,
-      "first_call_seconds": 3.61,
+      "seconds": 4.503,
+      "mlups": 11.64,
+      "first_call_seconds": 3.36,
       "population_bytes_per_cell": 108,
       "finite": true,
-      "copy_seconds": 0.00315,
-      "step_seconds": 0.02255,
-      "run_at": "2026-10-23T23:40:10Z",
+      "copy_seconds": 0.00185,
+      "step_seconds": 0.02252,
+      "run_at": "2026-10-24T00:31:01Z",
       "aircanopy": "0.1.0",
       "jax": "0.11.2",
       "device": {
@@ -128,7 +132,8 @@
       },
       "machine": {
         "cpus": 4,
-        "system": "Linux"
+        "system": "Linux",
+        "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz"
       }
     },
     {
@@ -138,14 +143,14 @@
       "form": "moments",
       "cells": 262144,
       "steps": 200,
-      "seconds": 11.252,
-      "mlups": 4.66,
-      "first_call_seconds": 3.6,
+      "seconds": 10.37,
+      "mlups": 5.06,
+      "first_call_seconds": 3.3,
       "population_bytes_per_cell": 216,
       "finite": true,
-      "copy_seconds": 0.00681,
-      "step_seconds": 0.05626,
-      "run_at": "2026-10-23T23:40:10Z",
+      "copy_seconds": 0.0105,
+      "step_seconds": 0.05185,
+      "run_at": "2026-10-24T00:31:01Z",
       "aircanopy": "0.1.0",
       "jax": "0.11.2",
       "device": {
@@ -154,7 +159,8 @@
       },
       "machine": {
         "cpus": 4,
-        "system": "Linux"
+        "system": "Linux",
+        "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz"
       }
     },
     {
@@ -164,14 +170,14 @@
       "form": "direct",
       "cells": 262144,
       "steps": 200,
-      "seconds": 3.464,
-      "mlups": 15.13,
-      "first_call_seconds": 3.07,
+      "seconds": 3.492,
+      "mlups": 15.01,
+      "first_call_seconds": 3.0,
       "population_bytes_per_cell": 76,
       "finite": true,
-      "copy_seconds": 0.00093,
-      "step_seconds": 0.01732,
-      "run_at": "2026-10-23T23:40:10Z",
+      "copy_seconds": 0.00129,
+      "step_seconds": 0.01746,
+      "run_at": "2026-10-24T00:31:01Z",
       "aircanopy": "0.1.0",
       "jax": "0.11.2",
       "device": {
@@ -180,7 +186,8 @@
       },
       "machine": {
         "cpus": 4,
-        "system": "Linux"
+        "system": "Linux",
+        "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz"
       }
     },
     {
@@ -190,14 +197,14 @@
       "form": "direct",
       "cells": 262144,
       "steps": 200,
-      "seconds": 7.586,
-      "mlups": 6.91,
-      "first_call_seconds": 3.22,
+      "seconds": 7.028,
+      "mlups": 7.46,
+      "first_call_seconds": 3.27,
       "population_bytes_per_cell": 152,
       "finite": true,
-      "copy_seconds": 0.0044,
-      "step_seconds": 0.03793,
-      "run_at": "2026-10-23T23:40:10Z",
+      "copy_seconds": 0.00475,
+      "step_seconds": 0.03514,
+      "run_at": "2026-10-24T00:31:01Z",
       "aircanopy": "0.1.0",
       "jax": "0.11.2",
       "device": {
@@ -206,7 +213,8 @@
       },
       "machine": {
         "cpus": 4,
-        "system": "Linux"
+        "system": "Linux",
+        "processor": "Intel(R) Xeon(R) Processor @ 2.10GHz"
       }
     }
   ]
