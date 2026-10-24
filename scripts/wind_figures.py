@@ -9,7 +9,13 @@ writes
   axes with a line of slope -2 for second order;
 - `docs/images/wind_taylor_green.png`: the Taylor-Green vortices at the time their speed has
   halved, 64 cells per period at the planned speed, and what is left of the error: a pattern
-  at twice the vortices' wavenumber, where their pressure lives.
+  at twice the vortices' wavenumber, where their pressure lives;
+- `docs/images/wind_lattices.png`, `wind_tgv1600.png`: the velocity sets, and the
+  Taylor-Green vortex at Reynolds number 1600 against its reference;
+- `docs/images/wind_abl.png`: the boundary layer of Step 11 (regularised collision);
+- `docs/images/wind_stability.png`, `wind_abl_noise.png`, `wind_abl_wall_model.png`: Step 12,
+  the noise test, the boundary layer's noise before and after, and its mean wind with the
+  recursive collision and the wall model read from higher up.
 
 Colours: the first slots of the reference categorical palette of the dataviz guidance, on a
 light surface; text stays in neutral ink and every line is labelled directly.
@@ -233,49 +239,96 @@ def tgv_dissipation(out: Path) -> None:
     plt.close(fig)
 
 
-def abl_profiles(out: Path) -> None:
+def _abl_runs() -> list[dict]:
+    return json.loads((ROOT / "results" / "wind_abl_cpu.json").read_text())["runs"]
+
+
+def _abl_profiles(out: Path, series, title: str, read_heights=(), legend="upper left") -> None:
     """The neutral boundary layer: mean wind against height over the roughness length (log
     scale, on which the law of the wall is one straight line for every run), and
-    phi = (kappa z / u*) dU/dz, which is 1 on the law of the wall."""
-    path = ROOT / "results" / "wind_abl_cpu.json"
-    runs = sorted(json.loads(path.read_text())["runs"], key=lambda r: (-r["h"], r["smagorinsky"]))
+    phi = (kappa z / u*) dU/dz, which is 1 on the law of the wall. series: (run, label, colour);
+    read_heights: (height in cells, colour) of a wall model that reads the wind there."""
     fig, (left, right) = plt.subplots(1, 2, figsize=(8.6, 4.6), dpi=150, facecolor=SURFACE,
                                       sharey=True)  # fmt: skip
     for ax in (left, right):
         _style(ax)
         ax.set_yscale("log")
-    z0 = runs[0]["z0"]
-    tallest = max(r["h"] for r in runs)
+    z0 = series[0][0]["z0"]
+    tallest = max(r["h"] for r, _, _ in series)
     z = np.geomspace(0.5, tallest, 50)
     left.plot(np.log(z / z0) / KAPPA, z / z0, color=INK, linewidth=2.2, label="law of the wall")
-    for k, r in enumerate(runs):
-        colour = SERIES[k % len(SERIES)]
-        label = f"Cs = {r['smagorinsky']}, H = {r['h']} cells"
+    for r, label, colour in series:
         left.plot(np.asarray(r["mean_u"]) / r["u_star"], np.asarray(r["z"]) / r["z0"],
                   color=colour, linewidth=1.8, marker="o", markersize=3, label=label)  # fmt: skip
         right.plot(r["phi"], np.asarray(r["z_phi"]) / r["z0"], color=colour, linewidth=1.8,
                    marker="o", markersize=3, label=label)  # fmt: skip
+    for height, colour in read_heights:
+        for ax in (left, right):
+            ax.axhline(height / z0, color=colour, linewidth=1.2, linestyle=(0, (2, 2)))
+        right.text(1.97, height / z0 * 1.04, f"read at {height} cells", color=INK, fontsize=7.5,
+                   ha="right", va="bottom")  # fmt: skip
     right.axvline(1.0, color=INK, linewidth=1.6)
     # The curves' lowest points sit near phi = 1, so a legend there would hide them: the left
     # panel's legend serves both, and the line is labelled where it is.
     right.text(1.03, 0.5 / z0 * 1.15, "law of the wall", color=INK, fontsize=8, va="bottom")
     for ax in (left, right):  # where the criterion applies, for the tallest box
         ax.axhspan(2 / z0, 0.2 * tallest / z0, color=GRID, alpha=0.6, zorder=0)
+    right.set_xlim(0.0, 2.0)
     left.set_xlabel("mean wind U / u*", color=INK)
     left.set_ylabel("height z / z0 (log scale)", color=INK)
     right.set_xlabel("phi = (kappa z / u*) dU/dz", color=INK)
     left.set_title("Mean wind", color=INK, fontsize=10, loc="left")
     right.set_title("Shear, scaled: 1 on the law of the wall", color=INK, fontsize=10,
                     loc="left")  # fmt: skip
-    left.legend(frameon=False, fontsize=8, labelcolor=INK, loc="upper left")
-    title = (f"Neutral boundary layer over a rough floor (band: where the criterion applies for "
-             f"H = {tallest} cells)")  # fmt: skip
+    left.legend(frameon=False, fontsize=8, labelcolor=INK, loc=legend)
     fig.suptitle(title, color=INK, fontsize=10.5, x=0.02, ha="left")
     fig.tight_layout()
     fig.savefig(out, facecolor=SURFACE)
     plt.close(fig)
 
 
+def abl_profiles(out: Path) -> None:
+    """Step 11: the three boundary-layer runs with the regularised collision."""
+    runs = [r for r in _abl_runs() if r.get("collision", "regularised") == "regularised"
+            and r.get("match_cells", 0) == 0]  # fmt: skip
+    runs.sort(key=lambda r: (-r["h"], r["smagorinsky"]))
+    series = [(r, f"Cs = {r['smagorinsky']}, H = {r['h']} cells", SERIES[k % len(SERIES)])
+              for k, r in enumerate(runs)]  # fmt: skip
+    tallest = max(r["h"] for r in runs)
+    title = (f"Neutral boundary layer over a rough floor (band: where the criterion applies for "
+             f"H = {tallest} cells)")  # fmt: skip
+    _abl_profiles(out, series, title)
+
+
+def abl_wall_model(out: Path) -> None:
+    """Step 12, all with Cs = 0.17 on 32 cells: the regularised collision, the recursive one,
+    and the recursive one with the wall model reading the wind higher up."""
+    runs = _abl_runs()
+
+    def pick(collision: str, match: int) -> dict | None:
+        found = [r for r in runs if r.get("collision", "regularised") == collision
+                 and r.get("match_cells", 0) == match and r["smagorinsky"] == 0.17
+                 and r["h"] == 32]  # fmt: skip
+        return found[0] if found else None
+
+    wanted = [("regularised", 0, "regularised, reads the first cell", SERIES[1]),
+              ("recursive", 0, "recursive, reads the first cell", SERIES[0]),
+              ("recursive", 6, "recursive, reads 6.5 cells up", SERIES[2]),
+              ("recursive", 3, "recursive, reads 3.5 cells up", SERIES[3])]  # fmt: skip
+    series, heights = [], []
+    for collision, match, label, colour in wanted:
+        r = pick(collision, match)
+        if r is not None:
+            series.append((r, label, colour))
+            if match:
+                heights.append((match + 0.5, colour))
+    _abl_profiles(out, series, "Which collision, and where the wall model reads the wind "
+                  "(Cs = 0.17; band: where the criterion applies)", heights,
+                  legend="lower right")  # fmt: skip
+
+
+#: Top of the noise picture's axis, where a run that failed is marked.
+TOP = 1e6
 #: One colour per collision in every picture of Step 12.
 COLLISION_COLOURS = {"recursive": SERIES[0], "regularised": SERIES[1], "bgk": SERIES[3]}
 COLLISION_NAMES = {"recursive": "recursive", "regularised": "regularised", "bgk": "BGK"}
@@ -297,25 +350,33 @@ def noise_test(out: Path) -> None:
                 continue
 
             def badness(r):
+                # The worst run fails first; among runs that do not fail, the noisiest.
                 values = [v for v in r["noise_energy_over_start"] if v is not None]
-                return (r["finite"], -(len(values)), -max(values))
+                return (r["finite"], len(values), -max(values, default=math.inf))
 
             worst = min(runs, key=badness)
             values = [1.0] + [v for v in worst["noise_energy_over_start"] if v is not None]
-            steps = [k * worst["steps_per_check"] / 1000 for k in range(len(values))]
+            every = worst["steps_per_check"] / 1000
+            steps = [k * every for k in range(len(values))]
             colour = COLLISION_COLOURS[collision]
             label = f"{COLLISION_NAMES[collision]} (wind along {worst['direction']})"
             ax.plot(steps, values, color=colour, linewidth=2, marker="o", markersize=3,
                     label=label)  # fmt: skip
-            if not worst["finite"]:
-                ax.plot(steps[-1] + 1, values[-1], marker="x", color=colour, markersize=9,
-                        markeredgewidth=2.2)  # fmt: skip
+            if not worst["finite"]:  # the check at which the numbers had overflowed
+                ax.plot([steps[-1], steps[-1] + every], [values[-1], TOP], color=colour,
+                        linewidth=1.4, linestyle=(0, (2, 2)))  # fmt: skip
+                ax.plot(steps[-1] + every, TOP, marker="x", color=colour, markersize=10,
+                        markeredgewidth=2.4, clip_on=False)  # fmt: skip
         ax.axhline(1.0, color=MUTED, linewidth=1, linestyle=(0, (4, 3)))
+        ax.text(20.8, 1.25, "start", color=MUTED, fontsize=8, ha="right", va="bottom")
+        ax.set_ylim(1e-3, TOP)
         ax.set_title(lattice, color=INK, fontsize=10, loc="left")
         ax.set_xlabel("time steps (thousands)", color=INK)
         ax.set_xlim(0, 21)
-        ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="upper left")
+        ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="center right")
     axes[0].set_ylabel("noise energy ÷ its start (log scale)", color=INK)
+    fig.text(0.02, 0.015, "x: the run failed (its numbers overflowed) by this step",
+             color=INK, fontsize=8)  # fmt: skip
     fig.suptitle("Tiny noise in a uniform wind at Mach 0.17, with almost no viscosity",
                  color=INK, fontsize=10.5, x=0.02, ha="left")  # fmt: skip
     fig.tight_layout()
@@ -365,6 +426,9 @@ def main() -> None:
     taylor_green_fields(images / "wind_taylor_green.png")
     tgv_dissipation(images / "wind_tgv1600.png")
     abl_profiles(images / "wind_abl.png")
+    noise_test(images / "wind_stability.png")
+    abl_noise(images / "wind_abl_noise.png")
+    abl_wall_model(images / "wind_abl_wall_model.png")
 
 
 if __name__ == "__main__":

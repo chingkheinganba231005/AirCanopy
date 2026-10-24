@@ -1,0 +1,695 @@
+{
+ "what": "growth of tiny noise in a uniform wind with almost no viscosity, by collision",
+ "run_at": "2026-10-23T23:59:26Z",
+ "aircanopy": "0.1.0",
+ "jax": "0.11.2",
+ "device": {
+  "platform": "cpu",
+  "kind": "cpu"
+ },
+ "cells": 32768,
+ "tau0": 0.500003,
+ "noise": 0.0001,
+ "dtype": "float32",
+ "runs": [
+  {
+   "lattice": "D3Q19",
+   "collision": "regularised",
+   "adopted": true,
+   "direction": "x",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 3.4
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "regularised",
+   "adopted": true,
+   "direction": "xy",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 4.2
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "regularised",
+   "adopted": true,
+   "direction": "xyz",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 4.0
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "bgk",
+   "adopted": true,
+   "direction": "x",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.7058909847385599,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 7.9
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "bgk",
+   "adopted": true,
+   "direction": "xy",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.2755478028701761,
+    0.2420667698963433,
+    0.22850812119883637,
+    0.5402862426942708,
+    6.703665964390661,
+    167.25773940027437,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 25.0
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "bgk",
+   "adopted": true,
+   "direction": "xyz",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    25.79314040537202,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 7.8
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "recursive",
+   "adopted": false,
+   "direction": "x",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 4.9
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "recursive",
+   "adopted": false,
+   "direction": "xy",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 4.6
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "recursive",
+   "adopted": false,
+   "direction": "xyz",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 4.7
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "regularised",
+   "adopted": true,
+   "direction": "x",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 5.5
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "regularised",
+   "adopted": true,
+   "direction": "xy",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 5.4
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "regularised",
+   "adopted": true,
+   "direction": "xyz",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    81095.61254368644,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 9.4
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "bgk",
+   "adopted": true,
+   "direction": "x",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.24717686241666434,
+    0.23270878919152613,
+    0.27120215669755293,
+    0.9611414741026807,
+    10.503982106676569,
+    172.88256805661194,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 35.7
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "bgk",
+   "adopted": true,
+   "direction": "xy",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.3080081497009671,
+    12903.182775517524,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 16.4
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "bgk",
+   "adopted": true,
+   "direction": "xyz",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.27655553116165754,
+    314.69657513491404,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 16.2
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "recursive",
+   "adopted": true,
+   "direction": "x",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.020776366258898806,
+    0.01649157135565424,
+    0.014077625956337466,
+    0.012894351260500788,
+    0.011818286531031431,
+    0.011172682700666289,
+    0.01052313919938693,
+    0.010154794182287678,
+    0.009549253300094838,
+    0.009369264738266058
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 74.6
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "recursive",
+   "adopted": true,
+   "direction": "xy",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.017488976277629912,
+    0.013060108756079955,
+    0.010789237316569715,
+    0.009422617844558638,
+    0.008471285324605544,
+    0.00783447218581644,
+    0.0073279152680103396,
+    0.006888385112996024,
+    0.0063488796380057055,
+    0.006240511130607574
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 73.2
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "recursive",
+   "adopted": true,
+   "direction": "xyz",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.015549812621348606,
+    0.011033748836126192,
+    0.009059629505011785,
+    0.007715796314732347,
+    0.006777290908775199,
+    0.006242531924045787,
+    0.005838349203432289,
+    0.005312370077856939,
+    0.004856058880242017,
+    0.00490025960408917
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 66.4
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "bgk_extended",
+   "adopted": false,
+   "direction": "x",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.2662413158429421,
+    0.26435790844094653,
+    0.26489480607536975,
+    0.26807143589778265,
+    0.27020575498756105,
+    0.26780512219814984,
+    0.27245477558857023,
+    0.2717516350885257,
+    0.27414148310445813,
+    0.27242017791040357
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 60.8
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "bgk_extended",
+   "adopted": false,
+   "direction": "xy",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.2580481997708654,
+    0.25991964102127413,
+    0.26267898353112906,
+    0.2615924772323527,
+    0.2675769754292862,
+    0.2733443128432072,
+    0.3019238880065987,
+    0.37631803234806926,
+    0.6637497691464639,
+    1.6865679612068096
+   ],
+   "finite": true,
+   "stable": false,
+   "seconds": 61.8
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "bgk_extended",
+   "adopted": false,
+   "direction": "xyz",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.2555076342629784,
+    0.2538725660176454,
+    0.2578253851906692,
+    0.25676987653692573,
+    0.2550339636170133,
+    0.257280277823159,
+    0.2570450192437338,
+    0.25449494267190004,
+    0.25712052414573416,
+    0.2587063874086158
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 61.0
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "regularised_extended",
+   "adopted": false,
+   "direction": "x",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 6.6
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "regularised_extended",
+   "adopted": false,
+   "direction": "xy",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 6.7
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "regularised_extended",
+   "adopted": false,
+   "direction": "xyz",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    77036.2192793542,
+    173652.00188422494,
+    227396.05435246608,
+    185406.6318258115,
+    160934.96032489432,
+    214144.4112153065,
+    303666.21301410365,
+    410122.81802483054,
+    297147.7375944418,
+    304359.03290459106
+   ],
+   "finite": true,
+   "stable": false,
+   "seconds": 54.3
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "recursive_trace_free",
+   "adopted": false,
+   "direction": "x",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.010940702435374783,
+    0.008439759526046205,
+    0.007407386250269157,
+    0.006972020960770081,
+    0.006786124994365225,
+    0.006719322356659898,
+    0.006742655236334809,
+    0.00684473943414424,
+    0.007024568619976864,
+    0.007279656898756718
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 57.6
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "recursive_trace_free",
+   "adopted": false,
+   "direction": "xy",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.010534160807500253,
+    0.008473052874207469,
+    0.007884080921473819,
+    0.007731366988524662,
+    0.007753117076672877,
+    0.007711973025936335,
+    0.007131054437479369,
+    0.006695998515824319,
+    0.0067150241544210966,
+    0.007029630540594676
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 57.8
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "recursive_trace_free",
+   "adopted": false,
+   "direction": "xyz",
+   "mach": 0.17,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.009321876421149684,
+    0.006489534961862982,
+    0.005151658576818965,
+    0.004394356196242388,
+    0.003984319656216687,
+    0.003816152683060327,
+    0.003576049411982557,
+    0.0027688494864978675,
+    0.0024546203634605635,
+    0.0021695279704302666
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 58.2
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "recursive",
+   "adopted": true,
+   "direction": "x",
+   "mach": 0.25,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.01994623568570775,
+    0.015762092650476067,
+    0.013600578611227905,
+    0.012373155637544762,
+    0.011367781117925305,
+    0.010827756132621795,
+    0.010170686409973763,
+    0.00987142647147638,
+    0.009318508168897507,
+    0.009131527783808324
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 66.5
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "recursive",
+   "adopted": true,
+   "direction": "xy",
+   "mach": 0.25,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.01605997549426166,
+    0.012127749803411598,
+    0.01004951854584716,
+    0.00906669811832562,
+    0.008265252582298998,
+    0.007615651354312095,
+    0.007159545612440143,
+    0.006834024235462874,
+    0.0063617402728880544,
+    0.006273606827787014
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 66.4
+  },
+  {
+   "lattice": "D3Q27",
+   "collision": "recursive",
+   "adopted": true,
+   "direction": "xyz",
+   "mach": 0.25,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.01357316316029032,
+    0.00957509517441339,
+    0.007768451360956806,
+    0.0068994249419562885,
+    0.005942498738282802,
+    0.005324408338312153,
+    0.005132734977723136,
+    0.004919823424456539,
+    0.004304614334233091,
+    0.00431166573826494
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 66.3
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "regularised",
+   "adopted": true,
+   "direction": "x",
+   "mach": 0.06,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    1.7434257884849793,
+    5862.522289371055,
+    7312.178731367343,
+    13263.63716803944,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 16.6
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "regularised",
+   "adopted": true,
+   "direction": "xy",
+   "mach": 0.06,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.07979728716284006,
+    14.000590889515593,
+    11386.321517399549,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 14.0
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "regularised",
+   "adopted": true,
+   "direction": "xyz",
+   "mach": 0.06,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.02650718739365669,
+    0.1946331562045054,
+    31.459177375071608,
+    20529.32836209705,
+    49590.26177739,
+    null
+   ],
+   "finite": false,
+   "stable": false,
+   "seconds": 20.5
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "bgk",
+   "adopted": true,
+   "direction": "x",
+   "mach": 0.06,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.29549428643497816,
+    0.2717420804720597,
+    0.24886102704277058,
+    0.23204618012888736,
+    0.21799823851157718,
+    0.20281580966937687,
+    0.19350769016614822,
+    0.1812930862239912,
+    0.16756031945923122,
+    0.15427538013901274
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 36.2
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "bgk",
+   "adopted": true,
+   "direction": "xy",
+   "mach": 0.06,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.2899151858778963,
+    0.2671127536326887,
+    0.24020926280444543,
+    0.21817858926652903,
+    0.19970190785721897,
+    0.18114543201611416,
+    0.165271834309186,
+    0.15201416321348307,
+    0.13976752487621413,
+    0.1407538824001908
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 36.6
+  },
+  {
+   "lattice": "D3Q19",
+   "collision": "bgk",
+   "adopted": true,
+   "direction": "xyz",
+   "mach": 0.06,
+   "steps_per_check": 2000,
+   "noise_energy_over_start": [
+    0.31506222000021894,
+    0.3168947581781582,
+    0.325354920488155,
+    0.33188585183604935,
+    0.34131239044386524,
+    0.3518395996848705,
+    0.3699547000013946,
+    0.38733692452880597,
+    0.4017461066194408,
+    0.41937691529576077
+   ],
+   "finite": true,
+   "stable": true,
+   "seconds": 36.5
+  }
+ ]
+}
