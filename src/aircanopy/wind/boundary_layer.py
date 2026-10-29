@@ -34,6 +34,39 @@ from .lattice import VelocitySet
 from .solver import Params, Solver
 
 
+def box(
+    lat: VelocitySet,
+    nx: int,
+    ny: int,
+    h: int,
+    z0: float = 0.05,
+    u_star: float = 0.005,
+    smagorinsky: float = 0.1,
+    collision: str = "recursive",
+    match_cells: int = 0,
+    tau0: float = 0.500003,
+    backend: str = "jax",
+    dtype=np.float32,
+    **open_box,
+) -> Solver:
+    """The boundary layer's box (module docstring), not yet started: ground, a rough floor and
+    its wall model, the lid, and the push g = u*^2 / h. Periodic along x unless `open_box` holds
+    the settings of an open box: Params' absorb_cells and absorb_strength, and the Solver's
+    inlet_u (inflow.py feeds such a box from a periodic one)."""
+    solid = np.zeros((h + 1, ny, nx), bool)
+    solid[0] = True
+    g = u_star**2 / h
+    inlet_u = open_box.pop("inlet_u", None)
+    params = Params(tau0=tau0, smagorinsky=smagorinsky, g=(g, 0.0, 0.0), free_slip_top=True,
+                    slip_floors=True, collision=collision, match_cells=match_cells,
+                    open_x=inlet_u is not None, **open_box)  # fmt: skip
+    if match_cells:
+        _, drag = walls.matched_floor_drag(solid, z0, match_cells)
+        return Solver(lat, solid, params, backend, dtype, match_drag=drag, inlet_u=inlet_u)
+    drag = walls.rough_floor_drag(solid, z0)
+    return Solver(lat, solid, params, backend, dtype, drag=drag, inlet_u=inlet_u)
+
+
 def run(
     lat: VelocitySet,
     nx: int,
@@ -61,17 +94,9 @@ def run(
     `match_cells` = k > 0, the wall model reads the wind k cells above the first cell
     (walls.matched_floor_drag), at the height k + 1/2.
     """
-    solid = np.zeros((h + 1, ny, nx), bool)
-    solid[0] = True
-    g = u_star**2 / h
-    params = Params(tau0=tau0, smagorinsky=smagorinsky, g=(g, 0.0, 0.0), free_slip_top=True,
-                    slip_floors=True, collision=collision, match_cells=match_cells)  # fmt: skip
-    if match_cells:
-        _, drag = walls.matched_floor_drag(solid, z0, match_cells)
-        s = Solver(lat, solid, params, backend, dtype, match_drag=drag)
-    else:
-        drag = walls.rough_floor_drag(solid, z0)
-        s = Solver(lat, solid, params, backend, dtype, drag=drag)
+    s = box(lat, nx, ny, h, z0, u_star, smagorinsky, collision, match_cells, tau0, backend,
+            dtype)  # fmt: skip
+    solid, g = s.solid, u_star**2 / h
     read = 1 + match_cells  # the layer whose wind the wall model reads
     z = np.arange(h + 1) - 0.5  # height of each layer's centre above the floor plane
     z[0] = np.nan

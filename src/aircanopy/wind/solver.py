@@ -151,7 +151,8 @@ class Solver:
         self.set_equilibrium(ones, (0 * ones, 0 * ones, 0 * ones))
 
     @property
-    def _flags(self) -> tuple:
+    def flags(self) -> tuple:
+        """The step's switches, in the order lbm.step takes them after cfg."""
         p = self.params
         return (p.collision, p.free_slip_top, p.g is not None, self.drag is not None,
                 p.slip_floors, p.match_cells, p.open_x, p.absorb_cells)  # fmt: skip
@@ -286,10 +287,10 @@ class Solver:
 
     def run(self, n: int) -> None:
         if self.backend == "jax":
-            self.f = _jax_runner(self.lat.name, self._flags)(self.f, self.cfg, n)
+            self.f = _jax_runner(self.lat.name, self.flags)(self.f, self.cfg, n)
         else:
             for _ in range(n):
-                self.f = lbm.step(np, self.lat, self.f, self.cfg, *self._flags)
+                self.f = lbm.step(np, self.lat, self.f, self.cfg, *self.flags)
         self.time += n
 
     def fields(self) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
