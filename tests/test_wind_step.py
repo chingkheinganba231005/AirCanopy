@@ -16,7 +16,7 @@ ids = lambda lat: lat.name  # noqa: E731
 PAIRS = [(D3Q19, "regularised"), (D3Q19, "bgk"), (D3Q27, "recursive"), (D3Q27, "regularised"),
          (D3Q27, "bgk")]  # fmt: skip
 DEFAULTS = [(D3Q19, "regularised"), (D3Q27, "recursive")]
-pair_ids = lambda pair: f"{pair[0].name}-{pair[1]}" if isinstance(pair, tuple) else str(pair)  # noqa: E731
+pair_ids = lambda v: getattr(v, "name", str(v))  # noqa: E731  (pytest passes each value alone)
 
 
 def perturbed(shape, seed=0, du=0.02):

@@ -488,6 +488,85 @@ def collide_moments(
     return xp.where(cfg["fluid"], post, f)
 
 
+def _rebuild(xp, lat: VelocitySet, collision: str, rho, u, p):
+    """Packets from a density, a velocity and a non-equilibrium flux, built as the collision
+    builds them: the extended equilibrium and the recursive part for "recursive", the
+    second-order equilibrium and the regularised part otherwise."""
+    if collision == "recursive":
+        eq, neq, _ = product_terms(xp, lat, rho, u, p)
+        return eq + neq
+    return equilibrium(xp, lat, rho, u) + regularised_neq(xp, lat, p)
+
+
+def _open_column(xp, lat: VelocitySet, col, collision: str, side: int, g, rho=None, u=None):
+    """Rebuild the packets of a boundary column (Q, nz, ny) after streaming.
+
+    side = -1 is an inlet at x = 0, with the velocity u given; side = +1 an outlet at the last
+    x, with the density rho given and the velocity u given only across the flow (its x part
+    is replaced). The packets moving into the box from outside (c_x = -side) did not come from
+    the air and are unknown. Mass and momentum along x fix the missing one of rho and u_x from
+    the known packets (Zou and He 1997):
+        inlet:  rho (1 - u_x + g_x / 2) = S_0 + 2 S_-,   outlet:  u_x = (S_0 + 2 S_+) / rho - 1
+    + g_x / 2, with S_0, S_-, S_+ the sums of the packets with c_x = 0, -1, +1. Each unknown packet
+    is then the equilibrium plus the non-equilibrium part of the packet opposite to it (their
+    bounce-back of the non-equilibrium part), and the column is rebuilt from rho, u and the
+    flux of that set (as in the regularised boundary of Latt et al. 2008), so the collision
+    that follows sees a consistent state. The equilibrium is taken at u - g / 2, the velocity
+    the packets carry before the force's half step.
+
+    The equilibrium must be the collision's own. The extended one differs from the
+    second-order one in moments of third order and up, such as u_x^2 u_y, which are odd in
+    c_x: bouncing back the difference would turn it into a false stress wherever the wind
+    crosses the boundary at an angle.
+    """
+    cx = lat.c[:, 0]
+    s0 = _combine((1, col[i]) for i in range(lat.q) if cx[i] == 0)
+    s_in = _combine((1, col[i]) for i in range(lat.q) if cx[i] == side)  # moving out, known
+    if side < 0:
+        rho = (s0 + 2.0 * s_in) / (1.0 - u[0] + 0.5 * g[0])
+    else:
+        u = [(s0 + 2.0 * s_in) / rho - 1.0 + 0.5 * g[0], u[1], u[2]]
+    u_pre = [u[a] - 0.5 * g[a] for a in range(3)]
+    if collision == "recursive":
+        feq = product_terms(xp, lat, rho, u_pre)[0]
+    else:
+        feq = equilibrium(xp, lat, rho, u_pre)
+    full = [col[i] if cx[i] != -side else feq[i] + col[lat.opp[i]] - feq[lat.opp[i]]
+            for i in range(lat.q)]  # fmt: skip
+    p = flux(xp, lat, xp.stack(full), feq, u_pre)
+    return _rebuild(xp, lat, collision, rho, u_pre, p)
+
+
+def open_boundaries(xp, lat: VelocitySet, f, cfg, collision: str, forced: bool):
+    """A velocity inlet at x = 0 and a pressure outlet at the last x (`_open_column`).
+
+    cfg["inlet_u"]: the inlet's velocity, three arrays (nz, ny); cfg["outlet_rho"]: the outlet's
+    density. Across the flow, the outlet takes the velocity of the column before it. Solid
+    cells are left as they are.
+    """
+    g = cfg["g"] if forced else (0.0, 0.0, 0.0)
+    fluid = cfg["fluid"]
+    inlet = _open_column(xp, lat, f[..., 0], collision, -1, g, u=cfg["inlet_u"])
+    before = f[..., -2]
+    rho_b = moment(before, [1] * lat.q)
+    u_before = [moment(before, lat.c[:, a]) / rho_b + 0.5 * g[a] for a in range(3)]
+    outlet = _open_column(xp, lat, f[..., -1], collision, +1, g, rho=cfg["outlet_rho"] + 0 * rho_b,
+                          u=u_before)  # fmt: skip
+    inlet = xp.where(fluid[..., 0], inlet, f[..., 0])
+    outlet = xp.where(fluid[..., -1], outlet, f[..., -1])
+    return xp.concatenate([inlet[..., None], f[..., 1:-1], outlet[..., None]], axis=-1)
+
+
+def absorb(xp, f, cfg, cells: int):
+    """The absorbing layer of the last `cells` columns: f - sigma (f - f_target), with the
+    shares cfg["absorb_sigma"] (cells,) and the target packets cfg["absorb_target"]
+    (Q, nz, ny, cells). Solid cells keep their packets."""
+    tail = f[..., -cells:]
+    relaxed = tail - cfg["absorb_sigma"] * (tail - cfg["absorb_target"])
+    tail = xp.where(cfg["fluid"][..., -cells:], relaxed, tail)
+    return xp.concatenate([f[..., :-cells], tail], axis=-1)
+
+
 def step(
     xp,
     lat: VelocitySet,
@@ -499,7 +578,17 @@ def step(
     dragged=False,
     slip_floors=False,
     matched=0,
+    open_x=False,
+    absorbing=0,
 ):
-    """One time step: stream, then collide. Takes and returns post-collision populations."""
+    """One time step: stream, then collide. Takes and returns post-collision populations.
+
+    With `open_x`, the box is open along x: an inlet at x = 0 and an outlet at the last x
+    (`open_boundaries`) instead of periodic sides; `absorbing` > 0 adds an absorbing layer of
+    that many columns before the outlet (`absorb`).
+    """
     f = stream(xp, lat, f_post, cfg["solid"], free_slip_top, slip_floors)
-    return collide_moments(xp, lat, f, cfg, collision, forced, dragged, matched)
+    if open_x:
+        f = open_boundaries(xp, lat, f, cfg, collision, forced)
+    f = collide_moments(xp, lat, f, cfg, collision, forced, dragged, matched)
+    return absorb(xp, f, cfg, absorbing) if absorbing else f

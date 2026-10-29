@@ -45,6 +45,16 @@ class Params:
     #: The floors' wall model reads the wind this many cells above the first cell
     #: (walls.matched_floor_drag); 0 for the first-cell model alone.
     match_cells: int = 0
+    #: Open along x: a velocity inlet at x = 0 (Solver(inlet_u=...)) and a pressure outlet at
+    #: the last x (lbm.open_boundaries), instead of periodic sides.
+    open_x: bool = False
+    #: An absorbing layer before the outlet (open_x only): in its last `absorb_cells` columns,
+    #: after each collision, the packets move part of the way towards the equilibrium of
+    #: density 1 and the inlet's velocity (as given to the Solver), by a share that rises as
+    #: the square of the depth into the layer, up to `absorb_strength`. Eddies and sound fade
+    #: there instead of reflecting off the outlet (JOURNAL.md, Step 13).
+    absorb_cells: int = 0
+    absorb_strength: float = 0.0
 
 
 @functools.cache
@@ -73,10 +83,15 @@ class Solver:
         dtype=np.float32,
         drag: np.ndarray | None = None,
         match_drag: np.ndarray | None = None,
+        inlet_u: tuple | None = None,
     ) -> None:
         solid = np.asarray(solid, dtype=bool)
         if solid.ndim != 3:
             raise ValueError("solid must have the shape (nz, ny, nx)")
+        if params.open_x != (inlet_u is not None):
+            raise ValueError("Params(open_x=True) and inlet_u, the inlet's velocity, go together")
+        if params.absorb_cells and not params.open_x:
+            raise ValueError("an absorbing layer needs Params(open_x=True)")
         if params.free_slip_top and (solid[-1].any() or not solid[0].all()):
             raise ValueError("with a free-slip top, the top layer must be air, the bottom solid")
         for field in (drag, match_drag):
@@ -111,11 +126,26 @@ class Solver:
             "drag": scalar(0.0) if drag is None else scalar(np.where(solid, 0.0, drag)),
             "match_drag": scalar(0.0) if match_drag is None else scalar(
                 np.where(solid, 0.0, match_drag)),
+            "inlet_u": None if inlet_u is None else tuple(
+                scalar(np.broadcast_to(c, solid.shape[:2])) for c in inlet_u),
+            "outlet_rho": scalar(1.0),
         }  # fmt: skip
         self.solid = solid
         self.drag = None if drag is None else np.where(solid, 0.0, np.asarray(drag, float))
         self.match_drag = (None if match_drag is None
                            else np.where(solid, 0.0, np.asarray(match_drag, float)))  # fmt: skip
+        if params.absorb_cells:
+            cells = params.absorb_cells
+            depth = (np.arange(cells, dtype=float) + 1.0) / cells  # 1/L ... 1 to the outlet
+            self.cfg["absorb_sigma"] = scalar(params.absorb_strength * depth**2)
+            shape = (*solid.shape[:2], cells)
+            # The layer acts on post-collision packets, which carry rho (u + g / 2).
+            u_target = tuple(np.broadcast_to(np.asarray(c, float)[..., None] if np.ndim(c) else c,
+                                             shape) + 0.5 * g[a]
+                             for a, c in enumerate(inlet_u))  # fmt: skip
+            self.cfg["absorb_target"] = xp.asarray(
+                self._equilibrium(np, np.ones(shape), u_target), dtype=self.dtype
+            )
         self.time = 0
         ones = np.ones(solid.shape)
         self.set_equilibrium(ones, (0 * ones, 0 * ones, 0 * ones))
@@ -124,7 +154,15 @@ class Solver:
     def _flags(self) -> tuple:
         p = self.params
         return (p.collision, p.free_slip_top, p.g is not None, self.drag is not None,
-                p.slip_floors, p.match_cells)  # fmt: skip
+                p.slip_floors, p.match_cells, p.open_x, p.absorb_cells)  # fmt: skip
+
+    def set_inlet(self, u) -> None:
+        """Change the inlet's velocity: three arrays (nz, ny), or numbers, for the next steps.
+        The absorbing layer keeps the target it was given when the solver was made."""
+        xp = self.xp
+        shape = self.solid.shape[:2]
+        self.cfg["inlet_u"] = tuple(xp.asarray(np.broadcast_to(c, shape), dtype=self.dtype)
+                                    for c in u)  # fmt: skip
 
     def _equilibrium(self, xp, rho, u):
         """The equilibrium the collision relaxes to: the extended one for "recursive"."""
