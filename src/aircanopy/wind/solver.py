@@ -14,7 +14,8 @@ wraps around from the top to the bottom.
 `drag` is an optional field of drag coefficients lambda (per cell, lattice units): each cell
 feels a force -(lambda / 2) rho |u| u. walls.py makes one for the friction of rough floors.
 `match_drag`, with Params(match_cells=k), is a second such field whose force is driven by the
-wind k cells above instead of the cell's own (walls.matched_floor_drag).
+wind k cells above instead of the cell's own (walls.matched_floor_drag), or, in the top layer
+under a free-slip lid, k cells below (walls.matched_lid_drag).
 """
 
 from __future__ import annotations
@@ -43,7 +44,8 @@ class Params:
     #: Floors (solid below air) are free-slip, for a wall model (lbm.stream, walls.py).
     slip_floors: bool = False
     #: The floors' wall model reads the wind this many cells above the first cell
-    #: (walls.matched_floor_drag); 0 for the first-cell model alone.
+    #: (walls.matched_floor_drag), and a lid's this many below the top layer
+    #: (walls.matched_lid_drag); 0 for the first-cell model alone.
     match_cells: int = 0
     #: Open along x: a velocity inlet at x = 0 (Solver(inlet_u=...)) and a pressure outlet at
     #: the last x (lbm.open_boundaries), instead of periodic sides.
@@ -182,7 +184,8 @@ class Solver:
 
         After a collision the packets carry momentum rho u + F / 2, F = rho g - (lambda / 2)
         rho |u| u, so their equilibrium is taken at u + g / 2 - (lambda / 4) |u| u. A matched
-        drag adds -(lambda_m / 4) |u_k| u_k, with u_k the velocity k cells above.
+        drag adds -(lambda_m / 4) |u_k| u_k, with u_k the velocity k cells above (below, for
+        the top layer: lbm.matched_wind).
         """
         u = [np.asarray(c, dtype=np.float64) for c in u]
         g = self.params.g
@@ -191,7 +194,7 @@ class Solver:
             speed = np.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2)
             out = [out[a] - 0.25 * self.drag * speed * u[a] for a in range(3)]
         if self.match_drag is not None:
-            up = [np.roll(c, -self.params.match_cells, axis=0) for c in u]
+            up = lbm.matched_wind(np, u, self.params.match_cells)
             speed = np.sqrt(up[0] ** 2 + up[1] ** 2 + up[2] ** 2)
             out = [out[a] - 0.25 * self.match_drag * speed * up[a] for a in range(3)]
         return tuple(out)
@@ -202,15 +205,15 @@ class Solver:
         With w = sum f c / rho - g / 2 = u - (lambda / 4) |u| u, u = 2 w / (1 + sqrt(1 -
         lambda |w|)). This needs lambda |w| <= 1, which holds while lambda |u| < 3, far beyond
         the drag of floors or leaves; it is clipped there rather than give NaN. A matched drag
-        is undone with w of the cell k above, which is that cell's u where it has no drag of its
-        own: u = w + (lambda_m / 4) |w_k| w_k.
+        is undone with w of the cell k above (below, for the top layer), which is that cell's u
+        where it has no drag of its own: u = w + (lambda_m / 4) |w_k| w_k.
         """
         w = [lbm.moment(f, self.lat.c[:, a]) / rho for a in range(3)]
         g = self.params.g
         if g is not None:
             w = [w[a] - 0.5 * g[a] for a in range(3)]
         if match_drag is not None:
-            up = [xp.roll(c, -self.params.match_cells, axis=0) for c in w]
+            up = lbm.matched_wind(xp, w, self.params.match_cells)
             speed = xp.sqrt(up[0] * up[0] + up[1] * up[1] + up[2] * up[2])
             w = [w[a] + 0.25 * match_drag * speed * up[a] for a in range(3)]
         if drag is not None:
@@ -293,16 +296,21 @@ class Solver:
                 self.f = lbm.step(np, self.lat, self.f, self.cfg, *self.flags)
         self.time += n
 
-    def fields(self) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
-        """Density and velocity after the last step, as NumPy arrays in float64.
+    def fields(
+        self, rows: slice | None = None
+    ) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Density and velocity after the last step, as NumPy arrays in float64; with `rows`,
+        only those rows across the box (y), so that only they are copied off the graphics card.
 
         Read from the post-collision packets (see _velocity). Solid cells report air at rest at
         density 1.
         """
-        f = np.asarray(self.f, dtype=np.float64)
+        rows = slice(None) if rows is None else rows
+        f = np.asarray(self.f[:, :, rows], dtype=np.float64)
         rho = lbm.moment(f, [1] * self.lat.q)
-        u = self._velocity(np, f, rho, self.drag, self.match_drag)
-        fluid = ~self.solid
+        cut = lambda a: None if a is None else a[:, rows]  # noqa: E731
+        u = self._velocity(np, f, rho, cut(self.drag), cut(self.match_drag))
+        fluid = ~self.solid[:, rows]
         return np.where(fluid, rho, 1.0), tuple(np.where(fluid, c, 0.0) for c in u)
 
     def mean_kinetic_energy(self) -> float:
@@ -315,3 +323,20 @@ class Solver:
         u = self._velocity(xp, f, rho, drag, match_drag)
         e = 0.5 * rho * (u[0] * u[0] + u[1] * u[1] + u[2] * u[2])
         return float(xp.sum(xp.where(fluid, e, 0.0)) / xp.sum(fluid))
+
+    def layer_moments(self) -> dict[str, np.ndarray]:
+        """Means over the air of each layer (z) of the velocity and of its products, computed
+        where the state lives, so that only a few numbers per layer are copied back: "u", "v",
+        "w", "uu", "vv", "ww" and "uw", each an array (nz,), 0 in layers without air."""
+        xp, f, fluid = self.xp, self.f, self.cfg["fluid"]
+        rho = lbm.moment(f, [1] * self.lat.q)
+        drag = None if self.drag is None else self.cfg["drag"]
+        match_drag = None if self.match_drag is None else self.cfg["match_drag"]
+        u, v, w = self._velocity(xp, f, rho, drag, match_drag)
+        count = xp.maximum(xp.sum(fluid, axis=(1, 2)), 1)
+
+        def mean(a):
+            return np.asarray(xp.sum(xp.where(fluid, a, 0.0), axis=(1, 2)) / count, np.float64)
+
+        return {"u": mean(u), "v": mean(v), "w": mean(w), "uu": mean(u * u), "vv": mean(v * v),
+                "ww": mean(w * w), "uw": mean(u * w)}  # fmt: skip

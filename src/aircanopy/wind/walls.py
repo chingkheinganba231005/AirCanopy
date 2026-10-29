@@ -25,6 +25,7 @@ first cell, a wall model passes that error on, and the mean wind misses the law 
 flow, not the grid, with cells small enough there. `matched_floor_drag` does this for floors:
 the stress rho C_d(h) |U(h)| U(h), with C_d(h) = (kappa / ln(h / z0))^2 and U(h) the wind
 `cells_up` cells above the first cell, at h = cells_up + 1/2, acts on the first cell.
+`matched_lid_drag` does the same for a lid, reading the wind below the top layer.
 """
 
 from __future__ import annotations
@@ -109,6 +110,28 @@ def rough_lid_drag(solid: np.ndarray, z0) -> np.ndarray:
     out[-1] = 2.0 * drag_coefficient(np.broadcast_to(np.asarray(z0, dtype=float),
                                                      solid.shape[1:]))  # fmt: skip
     return out
+
+
+def matched_lid_drag(solid: np.ndarray, z0, cells_down: int) -> tuple[np.ndarray, np.ndarray]:
+    """The lid's wall model fed from `cells_down` cells below the top layer: matched_floor_drag
+    turned upside down, for a channel closed at the top (rough_lid_drag).
+
+    Returns (local, matched): `matched` holds 2 C_d(h), h = cells_down + 1/2, in the top layer
+    where at least cells_down more cells of air lie below it, for Solver(match_drag=...) with
+    Params(match_cells=cells_down) (lbm.matched_wind reads the wind below for the top layer);
+    `local` holds the first-cell drag of the rest of the top layer, for Solver(drag=...).
+    """
+    if cells_down < 1:
+        raise ValueError("cells_down must be at least 1; 0 is the first-cell model")
+    solid = np.asarray(solid, dtype=bool)
+    if solid[-1].any():
+        raise ValueError("under a free-slip lid the top layer must be all air")
+    deep = ~solid[-1 - cells_down : -1].any(axis=0)
+    z0 = np.broadcast_to(np.asarray(z0, dtype=float), solid.shape[1:])
+    local, matched = np.zeros(solid.shape), np.zeros(solid.shape)
+    local[-1][~deep] = 2.0 * drag_coefficient(z0[~deep])
+    matched[-1][deep] = 2.0 * drag_coefficient(z0[deep], height=cells_down + Z1)
+    return local, matched
 
 
 def friction_velocity(u1: float, z0: float, kappa: float = KAPPA) -> float:

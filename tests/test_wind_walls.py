@@ -219,8 +219,10 @@ def test_the_velocity_read_back_with_matched_drag_is_the_one_set(lat, collision)
     shape = (6, 3, 4)
     solid = np.zeros(shape, bool)
     solid[0] = True
-    _, match_drag = walls.matched_floor_drag(solid, 0.05, cells_up=2)
-    params = Params(tau0=0.7, g=(1e-5, 0, 0), collision=collision, match_cells=2)
+    match_drag = (walls.matched_floor_drag(solid, 0.05, cells_up=2)[1]
+                  + walls.matched_lid_drag(solid, 0.05, cells_down=2)[1])  # fmt: skip
+    params = Params(tau0=0.7, g=(1e-5, 0, 0), free_slip_top=True, collision=collision,
+                    match_cells=2)  # fmt: skip
     s = Solver(lat, solid, params, "numpy", np.float64, match_drag=match_drag)
     rng = np.random.default_rng(15)
     rho = 1 + 0.01 * rng.standard_normal(shape)
@@ -265,7 +267,8 @@ def test_numpy_and_jax_agree_with_matched_drag(lat, collision):
     shape = (7, 4, 5)
     solid = np.zeros(shape, bool)
     solid[0] = True
-    _, match_drag = walls.matched_floor_drag(solid, 0.05, cells_up=2)
+    match_drag = (walls.matched_floor_drag(solid, 0.05, cells_up=2)[1]
+                  + walls.matched_lid_drag(solid, 0.05, cells_down=2)[1])  # fmt: skip
     params = Params(tau0=0.51, smagorinsky=0.15, g=(1e-5, 0.0, 0.0), free_slip_top=True,
                     slip_floors=True, collision=collision, match_cells=2)  # fmt: skip
     rng = np.random.default_rng(16)
@@ -278,3 +281,77 @@ def test_numpy_and_jax_agree_with_matched_drag(lat, collision):
         s.run(12)
         out.append(np.asarray(s.f))
     assert np.abs(out[0] - out[1]).max() < 1e-13
+
+
+def test_matched_lid_drag_splits_deep_and_shallow_cells():
+    solid = np.zeros((7, 3, 4), bool)
+    solid[0] = True
+    solid[1:5, 1, 2] = True  # a block whose top is 2 cells below the top layer
+    local, matched = walls.matched_lid_drag(solid, 0.05, cells_down=3)
+    assert local[-1, 1, 2] == 2 * walls.drag_coefficient(0.05)  # too shallow: first-cell model
+    assert matched[-1, 1, 2] == 0 and local[:-1].sum() == 0 and matched[:-1].sum() == 0
+    assert set(np.unique(matched[-1])) == {0.0, 2 * walls.drag_coefficient(0.05, height=3.5)}
+    assert ((local[-1] > 0) ^ (matched[-1] > 0)).all()
+    with pytest.raises(ValueError, match="at least 1"):
+        walls.matched_lid_drag(solid, 0.05, cells_down=0)
+    with pytest.raises(ValueError, match="top layer"):
+        walls.matched_lid_drag(np.ones((3, 2, 2), bool), 0.05, cells_down=1)
+
+
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_a_matched_lid_is_the_mirror_image_of_a_matched_floor(lat, collision):
+    """As the first-cell lid test, with both walls' stress driven by the wind k cells away: the
+    steady profile is symmetric about the middle, and lambda_m U_k^2 = g h at the two matching
+    cells, k above the first cell and k below the top layer."""
+    h, k = 8, 2
+    solid = np.zeros((h + 1, 2, 2), bool)
+    solid[0] = True
+    z0, g = 0.05, 2e-6
+    match_drag = (walls.matched_floor_drag(solid, z0, cells_up=k)[1]
+                  + walls.matched_lid_drag(solid, z0, cells_down=k)[1])  # fmt: skip
+    params = Params(tau0=0.8, g=(g, 0, 0), free_slip_top=True, slip_floors=True,
+                    collision=collision, match_cells=k)  # fmt: skip
+    s = Solver(lat, solid, params, "jax", np.float64, match_drag=match_drag)
+    lam = 2 * walls.drag_coefficient(z0, height=k + 0.5)
+    expected = math.sqrt(g * h / lam)
+    s.set_equilibrium(np.ones(solid.shape), (np.full(solid.shape, expected), 0 * solid, 0 * solid))
+    previous = 0.0
+    for _ in range(100):
+        s.run(5000)
+        _, (ux, _, _) = s.fields()
+        if abs(ux[1 + k].mean() - previous) < 1e-12:
+            break
+        previous = ux[1 + k].mean()
+    column = ux[1:, 0, 0]
+    assert column[k] == pytest.approx(expected, rel=1e-6)
+    assert np.abs(column - column[::-1]).max() < 1e-9
+
+
+def test_the_fields_of_some_rows_are_those_rows_of_all_the_fields():
+    shape = (7, 6, 5)
+    solid = np.zeros(shape, bool)
+    solid[0] = True
+    solid[1:3, 2, 1] = True
+    drag = walls.rough_floor_drag(solid, 0.05)
+    match_drag = walls.matched_lid_drag(solid, 0.05, cells_down=2)[1]
+    params = Params(tau0=0.6, g=(1e-5, 0, 0), free_slip_top=True, slip_floors=True,
+                    match_cells=2)  # fmt: skip
+    s = Solver(D3Q27, solid, params, "jax", np.float64, drag=drag, match_drag=match_drag)
+    rng = np.random.default_rng(17)
+    s.set_equilibrium(1 + 0.01 * rng.standard_normal(shape),
+                      tuple(0.03 * rng.standard_normal(shape) for _ in range(3)))  # fmt: skip
+    s.run(3)
+    rho, u = s.fields()
+    rho_rows, u_rows = s.fields(slice(1, 4))
+    assert np.array_equal(rho_rows, rho[:, 1:4])
+    assert all(np.array_equal(u_rows[k], u[k][:, 1:4]) for k in range(3))
+    # The layer means, worked out on the device, are those of the fields over the air.
+    moments = s.layer_moments()
+    air = ~solid
+    count = np.maximum(air.sum(axis=(1, 2)), 1)
+    mean = lambda a: np.where(air, a, 0.0).sum(axis=(1, 2)) / count  # noqa: E731
+    ux, uy, uz = u
+    for name, value in {"u": ux, "v": uy, "w": uz, "uu": ux * ux, "vv": uy * uy,
+                        "ww": uz * uz, "uw": ux * uz}.items():  # fmt: skip
+        assert np.abs(moments[name] - mean(value)).max() < 1e-15, name
+    assert moments["u"][0] == 0.0 and np.abs(moments["u"][1:]).max() > 1e-4

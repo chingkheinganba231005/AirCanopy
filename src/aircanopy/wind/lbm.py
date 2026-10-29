@@ -306,6 +306,15 @@ def stream(
     return xp.stack(out)
 
 
+def matched_wind(xp, u, k: int) -> list:
+    """The wind that a matched wall model reads for each cell: the cell k above, for a floor
+    (walls.matched_floor_drag); for the top layer, the cell k below, for a lid
+    (walls.matched_lid_drag). Only cells with a matched drag use it, so the rest of the field
+    is whatever the shift gives."""
+    up = [_roll(xp, c, (-k, 0, 0)) for c in u]
+    return [xp.concatenate([a[:-1], c[-1 - k : -k]], axis=0) for a, c in zip(up, u, strict=True)]
+
+
 def velocity_and_force(xp, rho, momentum, cfg, forced: bool, dragged: bool, matched: int = 0):
     """The velocity u = (momentum + F / 2) / rho and the force F on each cell (None if none).
 
@@ -316,8 +325,9 @@ def velocity_and_force(xp, rho, momentum, cfg, forced: bool, dragged: bool, matc
     which stays bounded however large lambda is (as in the 2D solver; Guo and Zhao 2002).
 
     With `matched` = k > 0, floor cells also feel -(lambda_m / 2) rho |u_k| u_k, where u_k is
-    u0 of the cell k above and lambda_m = cfg["match_drag"] (walls.matched_floor_drag). It does
-    not depend on the cell's own velocity, so it is applied as it is.
+    u0 of the cell k above and lambda_m = cfg["match_drag"] (walls.matched_floor_drag); under a
+    lid, the top layer's u_k is that of the cell k below (matched_wind). It does not depend on
+    the cell's own velocity, so it is applied as it is.
     """
     g = cfg["g"]
     u = [momentum[a] / rho + (0.5 * g[a] if forced else 0.0) for a in range(3)]
@@ -325,7 +335,7 @@ def velocity_and_force(xp, rho, momentum, cfg, forced: bool, dragged: bool, matc
         return u, None
     force = [rho * g[a] if forced else 0.0 * rho for a in range(3)]
     if matched:
-        up = [_roll(xp, c, (-matched, 0, 0)) for c in u]
+        up = matched_wind(xp, u, matched)
         speed_up = xp.sqrt(up[0] * up[0] + up[1] * up[1] + up[2] * up[2])
         pull = 0.5 * cfg["match_drag"] * rho * speed_up
         force = [force[a] - pull * up[a] for a in range(3)]
