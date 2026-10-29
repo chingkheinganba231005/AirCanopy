@@ -52,9 +52,11 @@ for the share of the error that sampling makes. x is measured from the cube's fr
 
 Adds the run to results/wind_cube_<device>.json, replacing an earlier run with the same
 settings: first when the roughness has been corrected, then when the averaging is done. The
-measurements are downloaded first, so that a run cannot fail at its end for want of them. The
 file holds only simulated values and measures of the difference, not the measurements, whose
-licence keeps them out of the repository (sources/ercoftac.py).
+licence keeps them out of the repository (sources/ercoftac.py). If they cannot be downloaded
+during a run, the run is recorded unjudged, and judged later from the file:
+
+    uv run python benchmarks/wind_cube.py --judge results/wind_cube_gpu.json
 """
 
 from __future__ import annotations
@@ -118,35 +120,45 @@ def start_channel(c: cube.Cube, pre) -> None:
     pre.set_equilibrium(np.ones(shape), (profile + noise[0], noise[1], noise[2]))
 
 
-def approach(c: cube.Cube, moments: dict, measured: ercoftac.Profile) -> dict:
-    """The channel's mean wind and turbulence by height, and how its mean wind compares with
-    the measured profile."""
+def approach(c: cube.Cube, moments: dict) -> dict:
+    """The channel's mean wind and turbulence by height (resolved part), scaled by its own bulk
+    velocity, and criterion A1."""
     u = moments["u"][1:]
     bulk = float(u.mean())
     var_u = moments["uu"][1:] - u**2
     var_w = moments["ww"][1:] - moments["w"][1:] ** 2
     uw = moments["uw"][1:] - u * moments["w"][1:]
-    y = measured["y"]
-    ratio = np.interp(y, heights(c), u / bulk) / measured["U"]
+    bulk_ratio = bulk / c.u_bulk
+    return {"bulk_velocity": bulk, "bulk_ratio": bulk_ratio, "u_star_over_bulk": c.u_star / bulk,
+            "mean_u_over_bulk": [float(v) for v in u / bulk],
+            "var_u_over_bulk2": [float(v) for v in var_u / bulk**2],
+            "var_w_over_bulk2": [float(v) for v in var_w / bulk**2],
+            "uw_over_bulk2": [float(v) for v in uw / bulk**2],
+            "A1_bulk_within": BULK_TOLERANCE,
+            "A1_passed": bool(abs(bulk_ratio - 1) <= BULK_TOLERANCE)}  # fmt: skip
+
+
+def judge(c: cube.Cube, run: dict, measured: list) -> None:
+    """Compare a run's simulated fields, as stored in the results, with the measurements:
+    criterion A2, and the difference at every station on the symmetry plane. Also used on
+    runs read back from the results file (--judge), when a run could not download them."""
+    a = run["approach"]
+    upstream = min((p for p in measured if p.z == 0.0), key=lambda p: abs(p.x - APPROACH_X))
+    y = upstream["y"]
+    ratio = np.interp(y, heights(c), a["mean_u_over_bulk"]) / upstream["U"]
     judged = (y >= PROFILE_HEIGHTS[0]) & (y <= PROFILE_HEIGHTS[1])
     worst = int(np.argmax(np.where(judged, np.abs(ratio - 1), -1.0)))
-    bulk_ratio = bulk / c.u_bulk
-    return {
-        "bulk_velocity": bulk,
-        "bulk_ratio": bulk_ratio,
-        "u_star_over_bulk": c.u_star / bulk,
-        "station": {"x": measured.x, "z": measured.z},
-        "worst_ratio": float(ratio[worst]),
-        "worst_at_y": float(y[worst]),
-        "mean_u_over_bulk": [float(v) for v in u / bulk],
-        "var_u_over_bulk2": [float(v) for v in var_u / bulk**2],
-        "var_w_over_bulk2": [float(v) for v in var_w / bulk**2],
-        "uw_over_bulk2": [float(v) for v in uw / bulk**2],
-        "A1_bulk_within": BULK_TOLERANCE,
-        "A2_profile_within": PROFILE_TOLERANCE,
-        "passed": bool(abs(bulk_ratio - 1) <= BULK_TOLERANCE
-                       and abs(ratio[worst] - 1) <= PROFILE_TOLERANCE),
-    }  # fmt: skip
+    a2 = bool(abs(ratio[worst] - 1) <= PROFILE_TOLERANCE)
+    a |= {"station": {"x": upstream.x, "z": upstream.z}, "worst_ratio": float(ratio[worst]),
+          "worst_at_y": float(y[worst]), "A2_profile_within": PROFILE_TOLERANCE,
+          "A2_passed": a2, "passed": bool(a["A1_passed"] and a2)}  # fmt: skip
+    if run.get("cube"):
+        cu = run["cube"]
+        solid = cube.site_solid(c)[:, c.symmetry_rows().start]
+        u, w = np.asarray(cu["plane_u_over_bulk"]), np.asarray(cu["plane_w_over_bulk"])
+        cu["stations"] = stations(c, solid, u, w, measured)
+        cu["clean_test"] = a["passed"]
+    run["judged"] = True
 
 
 def column_profile(c: cube.Cube, solid: np.ndarray, field: np.ndarray, x: float, y) -> list:
@@ -163,15 +175,16 @@ def column_profile(c: cube.Cube, solid: np.ndarray, field: np.ndarray, x: float,
     return [float(v) for v in out]
 
 
-def stations(c: cube.Cube, solid, u, w, bulk: float, measured: list) -> list:
-    """How far the simulated mean wind on the symmetry plane is from the measured, at every
-    measured station from x/H = -3 to 8: the root mean square of the difference, in U_b."""
+def stations(c: cube.Cube, solid, u, w, measured: list) -> list:
+    """How far the simulated mean wind on the symmetry plane (u and w in U_b) is from the
+    measured, at every measured station from x/H = -3 to 8: the root mean square of the
+    difference, in U_b."""
     out = []
     for p in measured:
         if p.z != 0.0 or not STATIONS_X[0] <= p.x <= STATIONS_X[1]:
             continue
-        sim_u = np.array(column_profile(c, solid, u / bulk, p.x, p["y"]))
-        sim_w = np.array(column_profile(c, solid, w / bulk, p.x, p["y"]))
+        sim_u = np.array(column_profile(c, solid, u, p.x, p["y"]))
+        sim_w = np.array(column_profile(c, solid, w, p.x, p["y"]))
         out.append({"x": p.x, "rms_U": float(np.sqrt(np.mean((sim_u - p["U"]) ** 2))),
                     "rms_W": float(np.sqrt(np.mean((sim_w - p["V"]) ** 2)))})  # fmt: skip
     return out
@@ -204,6 +217,28 @@ def write(run: dict, device) -> Path:
     return path
 
 
+def measurements() -> list | None:
+    """The measured profiles, or None if they cannot be downloaded now (the comparison can
+    then be made later from the results file, with --judge)."""
+    try:
+        return ercoftac.profiles("a")
+    except (OSError, ValueError) as error:  # no network, the server, or a changed file
+        print("the measurements could not be read:", error)
+        return None
+
+
+def judge_file(path: Path) -> None:
+    """Judge every run in a results file that could not be judged when it ran."""
+    measured = ercoftac.profiles("a")
+    data = json.loads(path.read_text())
+    for run in data["runs"]:
+        if not run.get("judged") and run.get("approach"):
+            judge(cube.Cube(h=run["settings"]["h"], u_bulk=run["settings"]["u_bulk"]), run,
+                  measured)  # fmt: skip
+            print("judged", run["settings"], run["approach"]["passed"])
+    path.write_text(json.dumps(data, indent=1) + "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lattice", default="D3Q27", choices=sorted(LATTICES))
@@ -217,12 +252,15 @@ def main() -> None:
     parser.add_argument("--settle", type=float, default=20.0)
     parser.add_argument("--average", type=float, default=200.0)
     parser.add_argument("--channel-only", action="store_true")
+    parser.add_argument("--judge", type=Path, help="judge the runs of this results file, only")
     args = parser.parse_args()
+    if args.judge:
+        judge_file(args.judge)
+        return
     lat = LATTICES[args.lattice]
     collision = args.collision or ("recursive" if lat.name == "D3Q27" else "regularised")
     t0 = time.perf_counter()
-    measured = ercoftac.profiles("a")
-    upstream = ercoftac.station(APPROACH_X, 0.0, "a")
+    measured = measurements()
     c = cube.Cube(h=args.height, u_bulk=args.u_bulk, smagorinsky=args.cs)
     period = round(c.h / c.u_bulk)  # T in steps
     every = max(1, round(period / 10))
@@ -296,29 +334,22 @@ def main() -> None:
             plane.add({"u": u, "w": w})
             halves[2 * k // n_samples].add({"floor": u[1]})
             probes.append([v[z, probe_x] for z in probe_z])
-    result = approach(c, channel.mean(), upstream)
-    run["approach"] = result
+    run["approach"] = approach(c, channel.mean())
     run["channel_bulk_every_period"] = bulk_history
     run["cube"] = None
-    run["seconds"] = round(time.perf_counter() - t0, 1)
-    print("approach:", {k: result[k] for k in ("bulk_ratio", "worst_ratio", "passed")})
-
     if site is not None:
-        bulk = result["bulk_velocity"]
+        bulk = run["approach"]["bulk_velocity"]
         mean = plane.mean()
         lengths = cube.separation_lengths(c, mean["u"][1])
         x_f, x_r = lengths["x_F"], lengths["x_R"]
         c1 = x_f is not None and abs(x_f / X_F - 1) <= X_F_TOLERANCE
         c2 = x_r is not None and abs(x_r / X_R - 1) <= X_R_TOLERANCE
-        plane_solid = site.solid[:, rows.start]
         run["cube"] = {
             "x_F": x_f, "x_R": x_r,
             "halves": [cube.separation_lengths(c, half.mean()["floor"]) for half in halves],
             "measured": {"x_F": X_F, "x_R": X_R},
             "C1_x_F_within": X_F_TOLERANCE, "C2_x_R_within": X_R_TOLERANCE,
-            "C1_passed": bool(c1), "C2_passed": bool(c2),
-            "passed": bool(c1 and c2), "clean_test": bool(result["passed"]),
-            "stations": stations(c, plane_solid, mean["u"], mean["w"], bulk, measured),
+            "C1_passed": bool(c1), "C2_passed": bool(c2), "passed": bool(c1 and c2),
             "strouhal": strouhal(c, np.asarray(probes), every, bulk)
                         | {"x": PROBE_X, "heights": list(PROBE_HEIGHTS), "measured": 0.145},
             "floor_u_over_bulk": [round(float(v) / bulk, 5) for v in mean["u"][1]],
@@ -327,8 +358,17 @@ def main() -> None:
             "plane_w_over_bulk": [[round(float(v) / bulk, 4) for v in row]
                                   for row in mean["w"]],
         }  # fmt: skip
-        run["seconds"] = round(time.perf_counter() - t0, 1)
-        print("cube:", {k: run["cube"][k] for k in ("x_F", "x_R", "passed", "clean_test")},
+    measured = measured or measurements()
+    if measured is None:
+        run["judged"] = False
+    else:
+        judge(c, run, measured)
+    run["seconds"] = round(time.perf_counter() - t0, 1)
+    shown = ("bulk_ratio", "worst_ratio", "passed")
+    print("approach:", {k: run["approach"].get(k) for k in shown})
+    if run["cube"]:
+        shown = ("x_F", "x_R", "passed", "clean_test")
+        print("cube:", {k: run["cube"].get(k) for k in shown},
               "St:", run["cube"]["strouhal"]["peak"])  # fmt: skip
     print("seconds:", run["seconds"], "wrote", write(run, device))
 

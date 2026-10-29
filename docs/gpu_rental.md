@@ -113,13 +113,13 @@ even after its jobs have ended. Without a volume, nothing else costs money.
    ```
 
    It shows the card's name, then the repository, then "Python environment", which takes a
-   few minutes, then "job 1 of 8". From then on you can close the browser and sleep. `nohup`
+   few minutes, then "job 1 of 13". From then on you can close the browser and sleep. `nohup`
    and `setsid` detach the run from the browser's terminal.
 
 **Morning**
 
 5. Open the pod again (Connect, Jupyter Lab). Open `gpu_run.log` in the file list on the left
-   and scroll to the end. It should end with `done: 8 jobs, ... failed`.
+   and scroll to the end. It should end with `done: 13 jobs, ... failed`.
 6. In the file list, open the folder `aircanopy`, long-press `aircanopy_gpu_results.zip`, and
    choose Download. Safari keeps it in the Files app, in Downloads. Send that zip in our chat.
    The zip is rewritten after every job, so it holds every result finished so far, even if a
@@ -128,7 +128,7 @@ even after its jobs have ended. Without a volume, nothing else costs money.
    pod that is only stopped erases its container disk, and the zip with it, so download first.
 
 The jobs are listed in `scripts/gpu_jobs.txt`: quick ones first (speed, the Taylor–Green
-vortex), then the boundary layer on finer grids. Each job may run for at most 4 hours
+vortex), then the cube, the boundary layer on finer grids, and the longest last. Each job may run for at most 4 hours
 (`JOB_HOURS`). To run only the speed test, put the job after the script's name:
 `nohup setsid bash gpu_run.sh "benchmarks/wind_speed.py 128 400" > gpu_run.log 2>&1 < /dev/null &`.
 

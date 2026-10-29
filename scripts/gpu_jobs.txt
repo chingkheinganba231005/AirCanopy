@@ -7,13 +7,22 @@ benchmarks/wind_speed.py 256 200
 benchmarks/wind_tgv1600.py 128 256
 benchmarks/wind_tgv1600.py 128 256 --lattice D3Q19
 
+# The cube on the floor of a channel, against the wind tunnel (benchmarks/wind_cube.py,
+# criteria written before the first run): 16 and 32 cells across the cube.
+benchmarks/wind_cube.py --height 16
+benchmarks/wind_cube.py --height 32
+
 # The boundary layer on finer grids (benchmarks/wind_abl.py, decided before the first run).
 benchmarks/wind_abl.py --cs 0.17 --nx 128 --ny 64 --height 64 --match 12
 benchmarks/wind_abl.py --cs 0.17 --nx 128 --ny 64 --height 64
 benchmarks/wind_abl.py --cs 0.1 --nx 128 --ny 64 --height 64 --match 12
-benchmarks/wind_abl.py --cs 0.17 --nx 256 --ny 128 --height 128 --match 25
 
 # The boundary layer through an open box fed from a periodic precursor, the inlet taking the
 # precursor's packets (benchmarks/wind_abl_open.py, criteria written before the first run).
 benchmarks/wind_abl_open.py --coupling packets
+
+# The longest last: the cube at half the speed (the Mach number's effect, Step 10), and the
+# two boundary layers 128 and 64 cells deep.
+benchmarks/wind_cube.py --height 32 --u-bulk 0.025
+benchmarks/wind_abl.py --cs 0.17 --nx 256 --ny 128 --height 128 --match 25
 benchmarks/wind_abl_open.py --coupling packets --height 64 --match 12
