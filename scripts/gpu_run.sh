@@ -6,7 +6,7 @@
 #
 # Start it so that it keeps running after the browser is closed (docs/gpu_rental.md):
 #
-#   cd /workspace && curl -fsSLO https://raw.githubusercontent.com/chingkheinganba231005/AirCanopy/main/scripts/gpu_run.sh
+#   mkdir -p /workspace && cd /workspace && curl -fsSLO https://raw.githubusercontent.com/chingkheinganba231005/AirCanopy/main/scripts/gpu_run.sh
 #   nohup setsid bash gpu_run.sh > gpu_run.log 2>&1 < /dev/null &
 #   tail -n 30 gpu_run.log      # to see how far it has got
 #

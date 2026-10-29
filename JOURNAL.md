@@ -1338,6 +1338,8 @@ In the lattice Boltzmann method the problem is concrete. After streaming, each c
 
 Such a boundary is exact for a uniform wind, but it reflects waves. For sound, an inlet that holds the velocity is like a wall, and an outlet that holds the pressure is like the open end of a flute: both send sound back into the box, where it bounces to and fro. Eddies that reach the outlet also leave a disturbance behind. So the last columns before the outlet are an *absorbing layer*: there, after each step, the packets are nudged part of the way towards the undisturbed wind, a little at the start of the layer and more towards the outlet, so that a wave fades as it goes in, and what reflects fades again on the way back. Absorbing layers are a common way to treat an outflow (Colonius 2004).
 
+The wind that reaches a city is already gusty, and a steady wind at the inlet would take a long way to grow gusts of its own. So the inlet can be fed by a second box, run at the same time: a box of the approach wind alone, which repeats along the flow and so keeps its gusts going for ever (a *precursor*). At every step, one slice of the precursor's wind becomes the inlet's wind (`wind/inflow.py`, Step 14).
+
 (More lessons follow as the project reaches them: trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---

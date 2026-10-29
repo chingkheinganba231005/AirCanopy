@@ -17,7 +17,9 @@ writes
   the noise test, the boundary layer's noise before and after, and its mean wind with the
   recursive collision and the wall model read from higher up;
 - `docs/images/wind_open.png`: Step 13, a pulse of sound leaving an open box with and without
-  the absorbing layer, and how little the open boundaries change a developed channel flow.
+  the absorbing layer, and how little the open boundaries change a developed channel flow;
+- `docs/images/wind_abl_open.png`: Step 14, the boundary layer through an open box fed from a
+  periodic precursor, slab by slab against the precursor.
 
 Colours: the first slots of the reference categorical palette of the dataviz guidance, on a
 light surface; text stays in neutral ink and every line is labelled directly.
@@ -469,6 +471,50 @@ def open_boundaries(out: Path) -> None:
     plt.close(fig)
 
 
+def abl_open(out: Path) -> None:
+    """Step 14 (benchmarks/wind_abl_open.py): the site's mean wind against the precursor's, by
+    height, in three slabs; and the variances and the floor's friction along the site."""
+    data = json.loads((ROOT / "results" / "wind_abl_open_cpu.json").read_text())
+    h, slabs = data["h"], data["site_slabs"]
+    z = np.asarray(data["z"]) / h
+    ref = np.asarray(data["precursor"]["mean_u"])
+    fig, (left, right) = plt.subplots(1, 2, figsize=(8.6, 3.9), dpi=150, facecolor=SURFACE)
+    for ax in (left, right):
+        _style(ax)
+    shown = [(0, "first slab, after the inlet"), (len(slabs) // 2 - 1, "middle slab"),
+             (len(slabs) - 2, "last slab before the layer")]  # fmt: skip
+    for (k, label), colour in zip(shown, SERIES, strict=False):
+        ratio = np.asarray(slabs[k]["mean_u"]) / ref
+        left.plot(ratio, z, color=colour, linewidth=2, marker="o", markersize=2.5,
+                  label=f"{label} ({k * h}-{(k + 1) * h} cells)")  # fmt: skip
+    for edge in (1 - data["criteria"]["1_mean_wind_within"],
+                 1 + data["criteria"]["1_mean_wind_within"]):  # fmt: skip
+        left.axvline(edge, color=MUTED, linewidth=1.2, linestyle=(0, (4, 3)))
+    left.set_xlabel("mean wind ÷ the precursor's", color=INK)
+    left.set_ylabel("height ÷ H", color=INK)
+    left.set_title("Mean wind, by height", color=INK, fontsize=10, loc="left")
+    left.legend(frameon=False, fontsize=7.5, labelcolor=INK, loc="upper left")
+    x = np.arange(len(slabs)) + 0.5
+    measures = [("variance_u_ratio", "variance of u"), ("variance_w_ratio", "variance of w"),
+                ("floor_stress_ratio", "floor friction")]  # fmt: skip
+    for (key, label), colour in zip(measures, SERIES, strict=False):
+        right.plot(x, [s[key] for s in slabs], color=colour, linewidth=2, marker="o",
+                   markersize=4, label=label)  # fmt: skip
+    right.axvspan(len(slabs) - 1, len(slabs), color=GRID, zorder=0)
+    right.text(len(slabs) - 0.5, 0.25, "absorbing\nlayer", color=MUTED, fontsize=8,
+               ha="center")  # fmt: skip
+    for edge in (0.85, 1.15):
+        right.axhline(edge, color=MUTED, linewidth=1.2, linestyle=(0, (4, 3)))
+    right.set_xlabel("position along the site ÷ H (inlet at 0)", color=INK)
+    right.set_ylabel("slab ÷ the precursor", color=INK)
+    right.set_title("Gusts and friction, slab by slab", color=INK, fontsize=10, loc="left")
+    right.set_xlim(0, len(slabs))
+    right.legend(frameon=False, fontsize=8, labelcolor=INK, loc="lower left")
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+
+
 def main() -> None:
     images = ROOT / "docs" / "images"
     lattices(images / "wind_lattices.png")
@@ -480,6 +526,7 @@ def main() -> None:
     abl_noise(images / "wind_abl_noise.png")
     abl_wall_model(images / "wind_abl_wall_model.png")
     open_boundaries(images / "wind_open.png")
+    abl_open(images / "wind_abl_open.png")
 
 
 if __name__ == "__main__":

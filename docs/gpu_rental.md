@@ -103,7 +103,7 @@ even after its jobs have ended. Without a volume, nothing else costs money.
 3. Paste this one line and press Return:
 
    ```
-   cd /workspace && curl -fsSLO https://raw.githubusercontent.com/chingkheinganba231005/AirCanopy/main/scripts/gpu_run.sh && nohup setsid bash gpu_run.sh > gpu_run.log 2>&1 < /dev/null &
+   mkdir -p /workspace && cd /workspace && curl -fsSLO https://raw.githubusercontent.com/chingkheinganba231005/AirCanopy/main/scripts/gpu_run.sh && nohup setsid bash gpu_run.sh > gpu_run.log 2>&1 < /dev/null &
    ```
 
 4. After a minute, check that it has started:
