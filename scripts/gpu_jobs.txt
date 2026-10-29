@@ -12,3 +12,8 @@ benchmarks/wind_abl.py --cs 0.17 --nx 128 --ny 64 --height 64 --match 12
 benchmarks/wind_abl.py --cs 0.17 --nx 128 --ny 64 --height 64
 benchmarks/wind_abl.py --cs 0.1 --nx 128 --ny 64 --height 64 --match 12
 benchmarks/wind_abl.py --cs 0.17 --nx 256 --ny 128 --height 128 --match 25
+
+# The boundary layer through an open box fed from a periodic precursor, the inlet taking the
+# precursor's packets (benchmarks/wind_abl_open.py, criteria written before the first run).
+benchmarks/wind_abl_open.py --coupling packets
+benchmarks/wind_abl_open.py --coupling packets --height 64 --match 12

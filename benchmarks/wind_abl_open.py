@@ -24,9 +24,17 @@ Criteria, written down before the first run:
 For scale, the same measures are recorded for the two halves of the precursor (two slabs H
 long) against the whole precursor: the difference that sampling alone makes.
 
-    uv run python benchmarks/wind_abl_open.py        # about an hour on the container's processor
+--coupling chooses how the precursor's plane reaches the inlet (wind/inflow.py). The first run,
+with "velocity", failed criteria 1 and 2 near the inlet (JOURNAL.md, Step 14); "packets" is
+the default since. On a graphics card the same test also runs at H = 64, the wall model
+reading at 0.2 delta = 12.8 cells, at the layer centre 12.5 (--match 12), with the same
+criteria (scripts/gpu_jobs.txt).
 
-Writes results/wind_abl_open_<device>.json.
+    uv run python benchmarks/wind_abl_open.py        # about two hours on the container's processor
+    uv run python benchmarks/wind_abl_open.py --height 16 --match 3 --coupling velocity
+
+Adds the run to results/wind_abl_open_<device>.json, replacing an earlier run with the same
+settings.
 """
 
 from __future__ import annotations
@@ -42,7 +50,7 @@ import numpy as np
 
 from aircanopy import __version__
 from aircanopy.wind import boundary_layer, lbm, walls
-from aircanopy.wind.inflow import Precursor
+from aircanopy.wind.inflow import COUPLINGS, Precursor
 from aircanopy.wind.lattice import LATTICES
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -104,6 +112,7 @@ def main() -> None:
     parser.add_argument("--spin-up", type=float, default=10.0)
     parser.add_argument("--settle", type=float, default=2.0)
     parser.add_argument("--average", type=float, default=10.0)
+    parser.add_argument("--coupling", default="packets", choices=COUPLINGS)
     args = parser.parse_args()
     lat = LATTICES[args.lattice]
     collision = args.collision or ("recursive" if lat.name == "D3Q27" else "regularised")
@@ -132,7 +141,7 @@ def main() -> None:
     site = boundary_layer.box(lat, n_slabs * h, h, h, **common, inlet_u=inlet, absorb_cells=h,
                               absorb_strength=args.absorb_strength)  # fmt: skip
     site.f = site.xp.tile(pre.f, (1, 1, 1, n_slabs // 2))
-    both = Precursor(pre, site)
+    both = Precursor(pre, site, coupling=args.coupling)
     both.run(round(args.settle * turnover))
     read = 1 + args.match
     lam = 2 * walls.drag_coefficient(Z0, height=read - 0.5)
@@ -155,14 +164,14 @@ def main() -> None:
     site_slabs = [s.result() | compare(s.result(), ref) for s in slabs]
     judged = site_slabs[:-1]  # the last slab is the absorbing layer
     device = jax.devices()[0]
-    out = {
-        "what": "the boundary layer through an open box fed from a periodic precursor",
+    run = {
         "run_at": dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "aircanopy": __version__,
         "jax": jax.__version__,
         "device": {"platform": device.platform, "kind": device.device_kind},
         "lattice": lat.name,
         "collision": collision,
+        "coupling": args.coupling,
         "h": h,
         "precursor_cells": [h + 1, h, 2 * h],
         "site_cells": [h + 1, h, n_slabs * h],
@@ -191,10 +200,21 @@ def main() -> None:
     }
     shown = ("worst_mean_ratio", "variance_u_ratio", "variance_w_ratio", "floor_stress_ratio",
              "pass")  # fmt: skip
-    for k, s in enumerate(site_slabs):
-        print(k, {key: s[key] for key in shown})
-    print("passed:", out["criteria"]["passed"], "seconds:", out["seconds"])
+    for k, slab in enumerate(site_slabs):
+        print(k, {name: slab[name] for name in shown})
+    print("passed:", run["criteria"]["passed"], "seconds:", run["seconds"])
     path = ROOT / "results" / f"wind_abl_open_{device.platform}.json"
+    old = json.loads(path.read_text()) if path.is_file() else {"runs": []}
+    if "runs" not in old:  # the first run (Step 14) was the whole file, with velocity coupling
+        old = {"runs": [{"coupling": "velocity", **old}]}
+
+    def key(r):
+        return (r["lattice"], r["collision"], r["coupling"], r["h"], r["site_cells"][2],
+                r["smagorinsky"], r["match_cells"], r["absorb_strength"], r["spin_up_turnovers"],
+                r["settle_turnovers"], r["average_turnovers"])  # fmt: skip
+
+    out = {"what": "the boundary layer through an open box fed from a periodic precursor",
+           "runs": [r for r in old["runs"] if key(r) != key(run)] + [run]}  # fmt: skip
     path.write_text(json.dumps(out, indent=1) + "\n")
     print(f"wrote {path}")
 

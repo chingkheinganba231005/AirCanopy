@@ -543,10 +543,22 @@ def open_boundaries(xp, lat: VelocitySet, f, cfg, collision: str, forced: bool):
     cfg["inlet_u"]: the inlet's velocity, three arrays (nz, ny); cfg["outlet_rho"]: the outlet's
     density. Across the flow, the outlet takes the velocity of the column before it. Solid
     cells are left as they are.
+
+    If cfg holds "inlet_packets", the packets moving into the box (c_x = +1), one array (nz, ny)
+    each in the order of the lattice, the inlet takes them as they are instead (inflow.py): the
+    packets that a periodic box of the approach flow streams into one of its own planes. They
+    carry that flow's density and stress along with its velocity, and the packets leaving the
+    box are not touched, so waves going upstream pass out through the inlet.
     """
     g = cfg["g"] if forced else (0.0, 0.0, 0.0)
     fluid = cfg["fluid"]
-    inlet = _open_column(xp, lat, f[..., 0], collision, -1, g, u=cfg["inlet_u"])
+    packets = cfg.get("inlet_packets")
+    if packets is None:
+        inlet = _open_column(xp, lat, f[..., 0], collision, -1, g, u=cfg["inlet_u"])
+    else:
+        given = iter(packets)
+        inlet = xp.stack([next(given) if lat.c[i, 0] > 0 else f[i, ..., 0]
+                          for i in range(lat.q)])  # fmt: skip
     before = f[..., -2]
     rho_b = moment(before, [1] * lat.q)
     u_before = [moment(before, lat.c[:, a]) / rho_b + 0.5 * g[a] for a in range(3)]

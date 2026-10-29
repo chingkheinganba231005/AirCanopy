@@ -11,11 +11,19 @@ site. At every step, one cross-section of the precursor's wind becomes the site'
     both = Precursor(precursor, site)
     both.run(1000)
 
-Both boxes advance together, one step each, in one compiled loop (`coupled_step`). The inlet
-takes, cell by cell, the velocity the precursor's own collision starts from on that plane: its
-momentum after streaming divided by its density, plus half a step of the body force, before
-any wall drag (lbm.velocity_and_force). The site's inlet cells then feel the same drag from the
-floor's wall model as the precursor's cells did, so the two winds agree there.
+Both boxes advance together, one step each, in one compiled loop (`coupled_step`), and the
+plane is handed over in one of two ways (`coupling`):
+
+- "packets" (the default): the inlet takes the packets the precursor streams into that plane
+  from upstream (c_x = +1), as they are (lbm.open_boundaries). They bring the precursor's
+  density and stress along with its velocity, and the packets leaving the site through the
+  inlet are left alone, so waves going upstream leave instead of reflecting.
+- "velocity": the inlet is a velocity inlet (lbm._open_column) given, cell by cell, the
+  velocity the precursor's own collision starts from on that plane: its momentum after
+  streaming over its density, plus half a step of the body force, before any wall drag
+  (lbm.velocity_and_force). With the wall model, the inlet's cells then feel the same drag as
+  the precursor's. The first version; in the turbulent test of Step 14 it made the vertical
+  gusts after the inlet two to seven times too strong.
 
 The two boxes need the same lattice, cross-section (nz, ny) and walls on that plane, the same
 collision and wall model, and the same backend and precision. The site's absorbing layer, if
@@ -32,6 +40,9 @@ from . import lbm
 from .lattice import LATTICES
 from .solver import Solver
 
+#: How the precursor's plane is handed to the site's inlet (module docstring).
+COUPLINGS = ("packets", "velocity")
+
 
 def plane_velocity(xp, lat, f, cfg, forced: bool, plane: int):
     """u0 = sum_i f_i c_i / rho + g / 2 on the plane x = `plane` of pre-collision packets f, as
@@ -46,19 +57,24 @@ def plane_velocity(xp, lat, f, cfg, forced: bool, plane: int):
     )
 
 
-def coupled_step(xp, lat, f_pre, f_site, cfg_pre, cfg_site, flags_pre, flags_site, plane=0):
-    """One step of both boxes: the precursor streams, gives its plane's velocity to the site's
-    inlet, and collides; then the site takes its step (lbm.step) with that inlet."""
+def coupled_step(xp, lat, f_pre, f_site, cfg_pre, cfg_site, flags_pre, flags_site, plane=0,
+                 coupling="packets"):  # fmt: skip
+    """One step of both boxes: the precursor streams, hands its plane to the site's inlet (as
+    packets or as a velocity, module docstring), and collides; then the site takes its step
+    (lbm.step) with that inlet."""
     collision, free_slip_top, forced, dragged, slip_floors, matched = flags_pre[:6]
     f = lbm.stream(xp, lat, f_pre, cfg_pre["solid"], free_slip_top, slip_floors)
-    inlet = plane_velocity(xp, lat, f, cfg_pre, forced, plane)
+    if coupling == "packets":
+        given = {"inlet_packets": [f[i, ..., plane] for i in range(lat.q) if lat.c[i, 0] > 0]}
+    else:
+        given = {"inlet_u": plane_velocity(xp, lat, f, cfg_pre, forced, plane)}
     f_pre = lbm.collide_moments(xp, lat, f, cfg_pre, collision, forced, dragged, matched)
-    f_site = lbm.step(xp, lat, f_site, {**cfg_site, "inlet_u": inlet}, *flags_site)
+    f_site = lbm.step(xp, lat, f_site, {**cfg_site, **given}, *flags_site)
     return f_pre, f_site
 
 
 @functools.cache
-def _jax_runner(lattice: str, flags_pre: tuple, flags_site: tuple, plane: int):
+def _jax_runner(lattice: str, flags_pre: tuple, flags_site: tuple, plane: int, coupling: str):
     import jax
     import jax.numpy as jnp
 
@@ -66,7 +82,8 @@ def _jax_runner(lattice: str, flags_pre: tuple, flags_site: tuple, plane: int):
 
     def run(f_pre, f_site, cfg_pre, cfg_site, n):
         def body(_, fs):
-            return coupled_step(jnp, lat, *fs, cfg_pre, cfg_site, flags_pre, flags_site, plane)
+            return coupled_step(jnp, lat, *fs, cfg_pre, cfg_site, flags_pre, flags_site, plane,
+                                coupling)  # fmt: skip
 
         return jax.lax.fori_loop(0, n, body, (f_pre, f_site))
 
@@ -76,7 +93,10 @@ def _jax_runner(lattice: str, flags_pre: tuple, flags_site: tuple, plane: int):
 class Precursor:
     """A precursor and the site it feeds, stepped together (module docstring)."""
 
-    def __init__(self, precursor: Solver, site: Solver, plane: int = 0) -> None:
+    def __init__(self, precursor: Solver, site: Solver, plane: int = 0,
+                 coupling: str = "packets") -> None:  # fmt: skip
+        if coupling not in COUPLINGS:
+            raise ValueError(f"unknown coupling {coupling!r}; choose one of {COUPLINGS}")
         pre, sp = precursor.params, site.params
         if pre.open_x or not sp.open_x:
             raise ValueError("the precursor must be periodic along x and the site open")
@@ -100,15 +120,17 @@ class Precursor:
             ):
                 raise ValueError(f"the precursor's plane and the site's inlet need the same {name}")
         self.precursor, self.site, self.plane = precursor, site, plane
+        self.coupling = coupling
 
     def run(self, n: int) -> None:
         pre, site = self.precursor, self.site
         if pre.backend == "jax":
-            runner = _jax_runner(pre.lat.name, pre.flags, site.flags, self.plane)
+            runner = _jax_runner(pre.lat.name, pre.flags, site.flags, self.plane, self.coupling)
             pre.f, site.f = runner(pre.f, site.f, pre.cfg, site.cfg, n)
         else:
             for _ in range(n):
                 pre.f, site.f = coupled_step(np, pre.lat, pre.f, site.f, pre.cfg, site.cfg,
-                                             pre.flags, site.flags, self.plane)  # fmt: skip
+                                             pre.flags, site.flags, self.plane,
+                                             self.coupling)  # fmt: skip
         pre.time += n
         site.time += n

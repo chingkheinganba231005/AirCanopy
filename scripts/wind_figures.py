@@ -471,11 +471,12 @@ def open_boundaries(out: Path) -> None:
     plt.close(fig)
 
 
-def abl_open(out: Path) -> None:
+def abl_open(out: Path, coupling: str = "velocity", h: int = 32) -> None:
     """Step 14 (benchmarks/wind_abl_open.py): the site's mean wind against the precursor's, by
     height, in three slabs; and the variances and the floor's friction along the site."""
-    data = json.loads((ROOT / "results" / "wind_abl_open_cpu.json").read_text())
-    h, slabs = data["h"], data["site_slabs"]
+    runs = json.loads((ROOT / "results" / "wind_abl_open_cpu.json").read_text())["runs"]
+    data = next(r for r in runs if r["coupling"] == coupling and r["h"] == h)
+    slabs = data["site_slabs"]
     z = np.asarray(data["z"]) / h
     ref = np.asarray(data["precursor"]["mean_u"])
     fig, (left, right) = plt.subplots(1, 2, figsize=(8.6, 3.9), dpi=150, facecolor=SURFACE)

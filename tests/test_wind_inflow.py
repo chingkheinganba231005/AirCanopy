@@ -41,12 +41,31 @@ def boxes(lat, collision, backend="numpy", wall_model=False, nx_pre=8, nx_site=1
 
 @pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
 @pytest.mark.parametrize("wall_model", [False, True], ids=["walls", "wall-model"])
-def test_the_inlet_gets_the_precursors_wind(lat, collision, wall_model):
-    """The inlet takes the velocity the precursor's collision starts from, and the wall model's
-    drag depends only on velocities, so the site's inlet wind equals the precursor's wind on its
-    plane, to round-off, even with the wall model."""
+def test_with_packets_the_site_stays_a_copy_until_the_outlet_is_felt(lat, collision, wall_model):
+    """A site started as copies of the precursor, laid end to end, must stay identical to them,
+    to round-off, wherever the outlet cannot yet have been felt: packets move at most one cell a
+    step, so after n steps that is everywhere more than n + 1 cells upstream of the outlet."""
+    pre, site = boxes(lat, collision, wall_model=wall_model, nx_pre=6, nx_site=18)
+    site.f = np.tile(pre.f, 3)
+    copies = Precursor(pre, site)
+    n = 6
+    copies.run(n)
+    reached = 18 - n - 2
+    # Solid cells keep whatever was streamed into them; no air cell reads them (lbm.py).
+    air = ~site.solid[None, ..., :reached]
+    change = np.abs(site.f[..., :reached] - np.tile(pre.f, 3)[..., :reached])
+    assert np.where(air, change, 0.0).max() < 1e-14
+    assert np.abs(site.f[..., -1] - np.tile(pre.f, 3)[..., -1]).max() > 1e-6  # the outlet acts
+
+
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+@pytest.mark.parametrize("wall_model", [False, True], ids=["walls", "wall-model"])
+def test_with_velocity_the_inlet_gets_the_precursors_wind(lat, collision, wall_model):
+    """With coupling="velocity" the inlet takes the velocity the precursor's collision starts
+    from, and the wall model's drag depends only on velocities, so the site's inlet wind equals
+    the precursor's wind on its plane, to round-off, even with the wall model."""
     pre, site = boxes(lat, collision, wall_model=wall_model)
-    both = Precursor(pre, site, plane=3)
+    both = Precursor(pre, site, plane=3, coupling="velocity")
     both.run(12)
     _, u_pre = pre.fields()
     _, u_site = site.fields()
@@ -57,18 +76,20 @@ def test_the_inlet_gets_the_precursors_wind(lat, collision, wall_model):
 
 
 @pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
-def test_numpy_and_jax_agree_for_the_coupled_step(lat, collision):
+@pytest.mark.parametrize("coupling", ["packets", "velocity"])
+def test_numpy_and_jax_agree_for_the_coupled_step(lat, collision, coupling):
     out = []
     for backend in ("numpy", "jax"):
         pre, site = boxes(lat, collision, backend, wall_model=True)
-        Precursor(pre, site).run(10)
+        Precursor(pre, site, coupling=coupling).run(10)
         out.append((np.asarray(pre.f), np.asarray(site.f)))
     assert np.abs(out[0][0] - out[1][0]).max() < 1e-13
     assert np.abs(out[0][1] - out[1][1]).max() < 1e-13
 
 
 @pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
-def test_a_developed_channel_flows_from_the_precursor_through_the_site(lat, collision):
+@pytest.mark.parametrize("coupling", ["packets", "velocity"])
+def test_a_developed_channel_flows_from_the_precursor_through_the_site(lat, collision, coupling):
     """A periodic channel driven by a body force feeds an open copy of itself: the site keeps
     the precursor's profile, as in Step 13's test with a fixed inlet."""
     h, nx, tau, u_max = 8, 32, 0.8, 0.05
@@ -89,7 +110,7 @@ def test_a_developed_channel_flows_from_the_precursor_through_the_site(lat, coll
     shape = solid_site.shape
     site.set_equilibrium(np.ones(shape), (np.broadcast_to(profile[..., None], shape),
                                           np.zeros(shape), np.zeros(shape)))  # fmt: skip
-    Precursor(pre, site).run(2000)
+    Precursor(pre, site, coupling=coupling).run(2000)
     change = np.abs(site.fields()[1][0] - profile[..., None])[1:-1].max(axis=(0, 1)) / u_max
     assert change.max() < 3e-3
     assert np.abs(pre.fields()[1][0][:, :, 0] - profile).max() < 1e-12  # the precursor stays put
@@ -116,3 +137,5 @@ def test_the_boxes_must_fit_together():
     _, matched = boxes(D3Q27, "recursive", wall_model=True)
     with pytest.raises(ValueError, match="same collision"):
         Precursor(pre, matched)
+    with pytest.raises(ValueError, match="unknown coupling"):
+        Precursor(pre, site, coupling="pressure")
