@@ -144,6 +144,36 @@ def test_floor_friction_balances_the_push_of_the_wind(lat, collision):
     assert np.all(np.diff(ux[1:, 0, 0]) > 0)  # faster with height, as in a boundary layer
 
 
+@pytest.mark.parametrize(("lat", "collision"), DEFAULTS, ids=pair_ids)
+def test_a_rough_lid_is_the_mirror_image_of_a_rough_floor(lat, collision):
+    """A channel with the same roughness on its floor and under its lid: the steady profile is
+    symmetric about the middle, and the two walls together hold back the push on the column,
+    lambda U1^2 = g h, so U1 = sqrt(g h / lambda)."""
+    h = 8
+    solid = np.zeros((h + 1, 2, 2), bool)
+    solid[0] = True
+    z0, g = 0.05, 2e-6
+    drag = walls.rough_floor_drag(solid, z0) + walls.rough_lid_drag(solid, z0)
+    params = Params(tau0=0.8, g=(g, 0, 0), free_slip_top=True, slip_floors=True,
+                    collision=collision)  # fmt: skip
+    s = Solver(lat, solid, params, "jax", np.float64, drag=drag)
+    expected = math.sqrt(g * h / (2 * walls.drag_coefficient(z0)))
+    s.set_equilibrium(np.ones(solid.shape), (np.full(solid.shape, expected), 0 * solid, 0 * solid))
+    previous = 0.0
+    for _ in range(100):
+        s.run(5000)
+        _, (ux, _, _) = s.fields()
+        if abs(ux[1].mean() - previous) < 1e-12:
+            break
+        previous = ux[1].mean()
+    column = ux[1:, 0, 0]
+    assert column[0] == pytest.approx(expected, rel=1e-6)
+    assert np.abs(column - column[::-1]).max() < 1e-9
+    assert column[h // 2] > column[0]  # fastest in the middle
+    with pytest.raises(ValueError, match="top layer"):
+        walls.rough_lid_drag(np.ones((3, 2, 2), bool), z0)
+
+
 def test_matched_floor_drag_splits_deep_and_shallow_floors():
     solid = np.zeros((7, 3, 4), bool)
     solid[0] = True

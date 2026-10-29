@@ -96,6 +96,21 @@ def matched_floor_drag(solid: np.ndarray, z0, cells_up: int) -> tuple[np.ndarray
     return local, matched
 
 
+def rough_lid_drag(solid: np.ndarray, z0) -> np.ndarray:
+    """The drag field lambda = 2 C_d in the top layer, under a free-slip lid: a ceiling with
+    the same wall model as a floor (module docstring), for a channel closed at the top such as
+    the cube's. The lid mirrors packets halfway above the top layer's centre, as a slip floor
+    does halfway below the first cell's, so C_d is the same as a floor's of the same z0. Use
+    with Params(free_slip_top=True), which needs the top layer to be all air."""
+    solid = np.asarray(solid, dtype=bool)
+    if solid[-1].any():
+        raise ValueError("under a free-slip lid the top layer must be all air")
+    out = np.zeros(solid.shape)
+    out[-1] = 2.0 * drag_coefficient(np.broadcast_to(np.asarray(z0, dtype=float),
+                                                     solid.shape[1:]))  # fmt: skip
+    return out
+
+
 def friction_velocity(u1: float, z0: float, kappa: float = KAPPA) -> float:
     """u* from the wind u1 in the first cell above a floor of roughness length z0 (cells)."""
     return kappa * u1 / math.log(Z1 / z0)
