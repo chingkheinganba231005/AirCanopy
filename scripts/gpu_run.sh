@@ -1,27 +1,30 @@
 #!/usr/bin/env bash
 # Run AirCanopy's graphics-card jobs on any Linux machine with an NVIDIA card: a rented one
-# (RunPod, Vast.ai), or a Colab runtime opened with the Colab CLI's `colab console`. It runs
-# the same jobs as colab/wind_gpu.ipynb unless others are given, then packs what they wrote
-# into aircanopy_gpu_results.zip for scripts/colab_unpack.py, as the notebook does.
+# (RunPod, Vast.ai), or a Colab runtime opened with the Colab CLI's `colab console`. After each
+# job it packs everything the jobs have written so far into aircanopy_gpu_results.zip, the zip
+# that scripts/colab_unpack.py checks, so a run that stops early still leaves its results.
 #
-# Start it so that it keeps running when the connection drops or the laptop sleeps
-# (docs/gpu_rental.md):
+# Start it so that it keeps running after the browser is closed (docs/gpu_rental.md):
 #
-#   curl -fsSLO https://raw.githubusercontent.com/chingkheinganba231005/AirCanopy/main/scripts/gpu_run.sh
-#   nohup bash gpu_run.sh > gpu_run.log 2>&1 &
-#   tail -f gpu_run.log      # to watch; Ctrl-C stops the watching, not the run
+#   cd /workspace && curl -fsSLO https://raw.githubusercontent.com/chingkheinganba231005/AirCanopy/main/scripts/gpu_run.sh
+#   nohup setsid bash gpu_run.sh > gpu_run.log 2>&1 < /dev/null &
+#   tail -n 30 gpu_run.log      # to see how far it has got
 #
-# Each argument is one job, a script and its arguments, run with the project's Python:
+# Without arguments it runs the jobs listed in scripts/gpu_jobs.txt of the checked-out
+# repository, so the list can change without changing this script. Each argument is otherwise
+# one job, a script and its arguments, run with the project's Python:
 #
 #   bash gpu_run.sh "benchmarks/wind_speed.py 128 400"
 #
 # Settings, through the environment:
 #   AIRCANOPY_REF  branch or commit to run (default: main)
 #   AIRCANOPY_DIR  where to put the repository (default: /workspace/aircanopy if /workspace
-#                  exists, which RunPod keeps when a pod is stopped; else ./aircanopy)
+#                  exists, else ./aircanopy)
+#   JOB_HOURS      longest a job may run before it is stopped (default: 4)
 #   GITHUB_TOKEN   only if the repository is private
-#   STOP_POD=1     on RunPod, stop the pod when done: the card is released and billing for
-#                  it ends; /workspace and the results zip stay, and the disk is still billed
+#   STOP_POD=1     on RunPod, stop the pod when done, so that the card stops costing money.
+#                  Stopping erases the pod's container disk, so this is done only when
+#                  /workspace is a separate volume, which keeps the results zip
 set -uo pipefail
 
 REPO="github.com/chingkheinganba231005/AirCanopy.git"
@@ -30,10 +33,6 @@ if [[ -z "${AIRCANOPY_DIR:-}" ]]; then
   if [[ -d /workspace && -w /workspace ]]; then AIRCANOPY_DIR=/workspace/aircanopy; else AIRCANOPY_DIR="$PWD/aircanopy"; fi
 fi
 JOBS=("$@")
-if [[ ${#JOBS[@]} -eq 0 ]]; then # the notebook's jobs
-  JOBS=("benchmarks/wind_speed.py 128 400" "benchmarks/wind_speed.py 256 200"
-    "benchmarks/wind_tgv1600.py 128 256" "benchmarks/wind_tgv1600.py 128 256 --lattice D3Q19")
-fi
 
 say() { printf '\n[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 die() {
@@ -54,6 +53,10 @@ if ! { git fetch --quiet --depth 1 origin "$REF" && git checkout --quiet --detac
   die "cannot check out $REF"
 fi
 git log -1 --format='%H %s'
+if [[ ${#JOBS[@]} -eq 0 ]]; then
+  mapfile -t JOBS < <(grep -Ev '^[[:space:]]*(#|$)' scripts/gpu_jobs.txt)
+fi
+[[ ${#JOBS[@]} -gt 0 ]] || die "no jobs"
 
 say "Python environment"
 export PATH="$HOME/.local/bin:$PATH"
@@ -73,29 +76,37 @@ uv pip install --quiet --python .venv "jax[cuda12]==$jax" --exclude-newer "$cuto
   die "JAX does not see the graphics card"
 
 start=$(date +%s)
+zip="$AIRCANOPY_DIR/aircanopy_gpu_results.zip"
 failed=0
+packed=0
+n=0
 for job in "${JOBS[@]}"; do
-  say "job: $job"
+  n=$((n + 1))
+  say "job $n of ${#JOBS[@]}: $job"
   read -ra words <<<"$job"
-  if ! .venv/bin/python "${words[@]}"; then
+  if ! timeout "${JOB_HOURS:-4}h" .venv/bin/python "${words[@]}"; then
     failed=$((failed + 1))
-    say "job failed: $job"
+    say "job failed or ran out of time: $job"
+  fi
+  if .venv/bin/python scripts/gpu_pack.py --since "$start" --out "$zip" >/dev/null; then
+    packed=1
+    say "results so far are in $zip"
   fi
 done
 
-say "packing the results"
-zip="$AIRCANOPY_DIR/aircanopy_gpu_results.zip"
-if .venv/bin/python scripts/gpu_pack.py --since "$start" --out "$zip"; then
-  packed=1
+if ((packed)); then
   say "done: ${#JOBS[@]} jobs, $failed failed. Download $zip"
 else
-  packed=0
   say "done: ${#JOBS[@]} jobs, $failed failed; nothing was packed"
 fi
 
 if [[ "${STOP_POD:-0}" == 1 && -n "${RUNPOD_POD_ID:-}" ]]; then
-  say "stopping pod $RUNPOD_POD_ID"
-  runpodctl pod stop "$RUNPOD_POD_ID" || runpodctl stop pod "$RUNPOD_POD_ID" ||
-    say "could not stop the pod: stop it from the RunPod console"
+  if grep -qs " /workspace " /proc/mounts && [[ "$zip" == /workspace/* ]]; then
+    say "stopping pod $RUNPOD_POD_ID"
+    runpodctl pod stop "$RUNPOD_POD_ID" || runpodctl stop pod "$RUNPOD_POD_ID" ||
+      say "could not stop the pod: stop it from the RunPod console"
+  else
+    say "not stopping the pod: /workspace is not a separate volume, and stopping would erase the results"
+  fi
 fi
 exit $((failed > 0 || packed == 0))

@@ -1,0 +1,14 @@
+# Jobs for scripts/gpu_run.sh, run in this order, one per line: a script and its arguments,
+# run with the project's Python. Quick ones first, so that a short session still records them.
+
+# Speed, and the Taylor-Green vortex at Reynolds number 1600 (the jobs of colab/wind_gpu.ipynb).
+benchmarks/wind_speed.py 128 400
+benchmarks/wind_speed.py 256 200
+benchmarks/wind_tgv1600.py 128 256
+benchmarks/wind_tgv1600.py 128 256 --lattice D3Q19
+
+# The boundary layer on finer grids (benchmarks/wind_abl.py, decided before the first run).
+benchmarks/wind_abl.py --cs 0.17 --nx 128 --ny 64 --height 64 --match 12
+benchmarks/wind_abl.py --cs 0.17 --nx 128 --ny 64 --height 64
+benchmarks/wind_abl.py --cs 0.1 --nx 128 --ny 64 --height 64 --match 12
+benchmarks/wind_abl.py --cs 0.17 --nx 256 --ny 128 --height 128 --match 25

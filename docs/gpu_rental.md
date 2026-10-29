@@ -72,8 +72,9 @@ Notes:
 
 ## Recommendation
 
-1. **For the next jobs** (speed test, Taylor–Green at 256³, the cube's approach channel): rent
-   an RTX 4090 on RunPod's Community Cloud, or an RTX 3090 when no 4090 is free. For HK$77 a
+1. **For the next jobs** (speed test, Taylor–Green at 256³, the boundary layer on finer
+   grids, the cube's approach channel): rent an RTX 4090 on RunPod's Community Cloud, or an
+   RTX 3090 when no 4090 is free. For HK$77 a
    4090 runs 29 h, and by bandwidth does a little more work than Colab's 13 h of A100, without
    the 12-hour limit or the idle timeouts. Start with the speed test alone (a quarter of an
    hour, under HK$1): it shows whether the step follows bandwidth.
@@ -84,33 +85,58 @@ Notes:
 3. **Free hours**: Modal's US$30 a month covers 12 h of an A100 80 GB. Worth setting up once
    the runs are routine.
 
-## How to run on RunPod
+## How to run on RunPod, from an iPad, overnight
 
-1. Make an account and add US$10 of credit (about HK$78).
-2. Deploy a pod: Community Cloud, RTX 4090 (or 3090), a template with CUDA 12 (for example
-   RunPod's PyTorch template), 20 GB of volume disk at `/workspace`.
-3. Open a terminal on the pod (Connect, then the web terminal, or JupyterLab's Terminal).
-4. Type:
+The pod runs on RunPod's computers, so the jobs go on after you close the browser and the
+iPad sleeps. The pod costs its hourly price from the moment it starts until you terminate it,
+even after its jobs have ended. Without a volume, nothing else costs money.
+
+**Evening**
+
+1. Deploy a pod. At the top of the Deploy page choose **Community Cloud** (cheaper than Secure
+   Cloud for the same card: on 2026-10-29, US$0.34 an hour for an RTX 4090 against US$0.89),
+   and **On-Demand**, not Spot (a Spot pod can be taken back during the night). Choose an RTX
+   4090, or an RTX 3090 if no 4090 is free. RunPod's PyTorch template (CUDA 12.8) is fine,
+   and so is its container disk of 20 to 50 GB. No volume is needed.
+2. When the pod is running, open it, press **Connect**, and open **Jupyter Lab** (then File,
+   New, Terminal) or the **web terminal**.
+3. Paste this one line and press Return:
 
    ```
-   cd /workspace
-   curl -fsSLO https://raw.githubusercontent.com/chingkheinganba231005/AirCanopy/main/scripts/gpu_run.sh
-   nohup bash gpu_run.sh > gpu_run.log 2>&1 &
-   tail -f gpu_run.log
+   cd /workspace && curl -fsSLO https://raw.githubusercontent.com/chingkheinganba231005/AirCanopy/main/scripts/gpu_run.sh && nohup setsid bash gpu_run.sh > gpu_run.log 2>&1 < /dev/null &
    ```
 
-   `nohup` keeps the run going when you close the browser. Ctrl-C stops the `tail` (the
-   watching), not the run. To run only the speed test:
-   `nohup bash gpu_run.sh "benchmarks/wind_speed.py 128 400" > gpu_run.log 2>&1 &`.
-5. When the log ends with `done`, download `/workspace/aircanopy/aircanopy_gpu_results.zip`
-   (JupyterLab's file browser) and send it here. Then **terminate** the pod in RunPod's console.
-   A pod left running costs its hourly price even when it does nothing; a stopped pod still
-   pays for its disk.
+4. After a minute, check that it has started:
 
-With `STOP_POD=1 nohup bash gpu_run.sh ...`, the script stops the pod when the jobs end, so the
-card stops costing money at once. The zip stays in `/workspace`, which RunPod keeps when a pod
-is stopped; but the disk stays on that machine, so to download the zip the pod must be started
-there again, which needs a free card on it.
+   ```
+   tail -n 20 /workspace/gpu_run.log
+   ```
+
+   It shows the card's name, then the repository, then "Python environment", which takes a
+   few minutes, then "job 1 of 8". From then on you can close the browser and sleep. `nohup`
+   and `setsid` detach the run from the browser's terminal.
+
+**Morning**
+
+5. Open the pod again (Connect, Jupyter Lab). Open `gpu_run.log` in the file list on the left
+   and scroll to the end. It should end with `done: 8 jobs, ... failed`.
+6. In the file list, open the folder `aircanopy`, long-press `aircanopy_gpu_results.zip`, and
+   choose Download. Safari keeps it in the Files app, in Downloads. Send that zip in our chat.
+   The zip is rewritten after every job, so it holds every result finished so far, even if a
+   job failed or the night was not long enough.
+7. Then **terminate** the pod (on the pod's page or its menu in the list of pods). A
+   pod that is only stopped erases its container disk, and the zip with it, so download first.
+
+The jobs are listed in `scripts/gpu_jobs.txt`: quick ones first (speed, the Taylor–Green
+vortex), then the boundary layer on finer grids. Each job may run for at most 4 hours
+(`JOB_HOURS`). To run only the speed test, put the job after the script's name:
+`nohup setsid bash gpu_run.sh "benchmarks/wind_speed.py 128 400" > gpu_run.log 2>&1 < /dev/null &`.
+
+With `STOP_POD=1` in front of `nohup`, the script stops the pod when the jobs end, so the card
+stops costing money at once. It does so only when `/workspace` is a separate volume (added
+when deploying), because stopping erases the container disk. The volume then keeps the zip,
+but it stays on that machine, so to download the zip the pod must be started there again,
+which needs a free card on it.
 
 ## On Vast.ai
 

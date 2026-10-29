@@ -18,6 +18,14 @@ et al. (2013) needed in their code (as reported by Larsson et al.). One more run
 (--match 3, cells 0.29 h_wm), to show how the answer depends on the height. They are judged
 by the same criteria 1 and 2.
 
+Finer grids, on a graphics card (scripts/gpu_jobs.txt), decided before their first run: the
+same box shape, 2H x H x H cells, at H = 64 and 128, with the same u* in lattice units, so a
+turnover takes 2 and 4 times as many steps. Cs = 0.17. The wall model reads at h_wm = 0.2
+delta: 12.8 cells for H = 64 and 25.6 for H = 128, read at the nearest layer centres, 12.5
+and 25.5 (--match 12, --match 25). At H = 64 also with Cs = 0.1, and once from the first cell
+(--match 0), to see whether the log-layer mismatch stays as the cells shrink. The same
+criteria 1 and 2.
+
     uv run python benchmarks/wind_abl.py --cs 0.1
     uv run python benchmarks/wind_abl.py --cs 0.17 --nx 64 --ny 32 --height 32
     uv run python benchmarks/wind_abl.py --cs 0.1 --lattice D3Q19     # the regularised collision

@@ -8,6 +8,8 @@ separately: it includes compiling. For comparison, D3Q19 also runs with the
 direction-by-direction form of the collision (lbm.collide), and each run records how long one
 plain read and write of all the packets takes, the floor no step can beat.
 
+A measurement that does not fit in the card's memory is recorded as "out of memory".
+
 Adds the runs to results/wind_speed_<device>.json, replacing earlier runs of the same
 lattice, precision, collision, form and box size. Runs recorded before Step 12 have no "form":
 they are read as the regularised collision, which was then the only one.
@@ -31,7 +33,7 @@ import numpy as np
 
 from aircanopy import __version__
 from aircanopy.wind import lbm
-from aircanopy.wind.lattice import D3Q19, D3Q27, LATTICES
+from aircanopy.wind.lattice import D3Q19, D3Q27
 from aircanopy.wind.solver import Params, Solver
 
 jax.config.update("jax_enable_x64", True)
@@ -111,16 +113,30 @@ def processor_model() -> str | None:
     return None
 
 
+def measure_or_note(lat, dtype, n: int, steps: int, collision: str, form: str = "moments"):
+    """measure(), or a record that the card ran out of memory: a large box in 64-bit numbers
+    may not fit on a 24 GB card, and that must not stop the other measurements."""
+    try:
+        r = measure(lat, dtype, n, steps, collision, form)
+        r["copy_seconds"] = round(copy_time(lat, dtype, n), 5)
+        r["step_seconds"] = round(r["seconds"] / r["steps"], 5)
+        return r
+    except Exception as e:  # JAX raises XlaRuntimeError, with RESOURCE_EXHAUSTED in the text
+        if "RESOURCE_EXHAUSTED" not in str(e) and "out of memory" not in str(e).lower():
+            raise
+        return {"lattice": lat.name, "dtype": np.dtype(dtype).name, "collision": collision,
+                "form": form, "cells": n**3, "steps": steps, "error": "out of memory",
+                "population_bytes_per_cell": lat.q * np.dtype(dtype).itemsize}  # fmt: skip
+
+
 def main(n: int = 64, steps: int = 200) -> None:
     device = jax.devices()[0]
     kinds = ((D3Q19, "regularised"), (D3Q27, "regularised"), (D3Q27, "recursive"))
-    runs = [measure(lat, dt_, n, steps, collision) for lat, collision in kinds
+    runs = [measure_or_note(lat, dt_, n, steps, collision) for lat, collision in kinds
             for dt_ in (np.float32, np.float64)]  # fmt: skip
-    runs += [measure(D3Q19, dt_, n, steps, "regularised", "direct")
+    runs += [measure_or_note(D3Q19, dt_, n, steps, "regularised", "direct")
              for dt_ in (np.float32, np.float64)]  # fmt: skip
     for r in runs:
-        r["copy_seconds"] = round(copy_time(LATTICES[r["lattice"]], np.dtype(r["dtype"]), n), 5)
-        r["step_seconds"] = round(r["seconds"] / r["steps"], 5)
         print(r)
     run_at = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     for r in runs:
