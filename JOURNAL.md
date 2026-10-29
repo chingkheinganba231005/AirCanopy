@@ -279,6 +279,13 @@ P1 is done: its exit check is met (Step 9).
 
 - [ ] The cube's approach flow: a periodic channel whose wall friction is matched to the measured profile upstream of the cube (ERCOFTAC case 041, x/H = −18), used as the cube's inflow
 - [ ] Flow around a cube on the floor of a channel, against wind-tunnel measurements (Martinuzzi and Tropea 1993; data: ERCOFTAC case 041), with the pass criteria written down before the run, at two speeds (to measure the effect of the Mach number, Step 10)
+
+  *The cube, planned on 2026-10-29, before any code for the case was written.*
+  - Data: `sources/ercoftac.py` reads the 67 measured profiles of mean velocity and stress; they are licensed for non-commercial use (open question 7).
+  - Setup, after Krajnović and Davidson (2002): Re = 40 000 on the bulk velocity and the cube's height H; the cube 3H from the inlet; the channel 2H high and 7H wide. Ours differs in four ways: the inlet is fed by a periodic channel of the same cross-section (`wind/inflow.py`, Step 14) instead of a fixed profile; the sides are periodic instead of slip; the ceiling is the free-slip lid with the wall model's drag in its top layer; and the outlet, with its absorbing layer, sits 10H behind the cube, so that the layer is far from the wake.
+  - Resolution: 16 to 32 cells across the cube (16 was the coarsest grid of Krajnović and Davidson), on the graphics card.
+  - Wall model: the floor and ceiling of the channel with the friction matched to the measured profile at x/H = −18 (the stress u'v' near the floor is about −0.0023 U_b², ERCOFTAC file `x01z09_a`); on the cube and the floor near it, the first-cell model (D-019).
+  - Criteria, proposed now: on the symmetry plane, the length of the separation in front of the cube, x_F/H, within 25 % of the measured 1.040, and the reattachment behind it, x_R/H, within 15 % of 1.612. The published large-eddy simulations listed by Krajnović and Davidson span 0.81 to 1.29 and 1.38 to 1.72 (−22 to +24 % and −14 to +7 %). Also recorded, without pass or fail: the mean velocity profiles at x/H = 0.5, 1, 2 and 4, and the Strouhal number of the eddies shed from the sides (measured 0.145). The benchmark will repeat these criteria in its docstring before its first run.
 - [x] A Colab notebook that runs the large cases on a graphics card and records what it ran (`colab/wind_gpu.ipynb`, Step 11)
 - [ ] Its first run: speed on a graphics card, and the Taylor–Green vortex at 256³ (on Colab, or on a rented card with `scripts/gpu_run.sh`: docs/gpu_rental.md)
 - [ ] Wind through the HKU site from one direction: mean wind speed 1.5 m above the ground, and streamlines, in the viewer, labelled *simulated*
