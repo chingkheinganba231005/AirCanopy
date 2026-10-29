@@ -268,7 +268,7 @@ P1 is done: its exit check is met (Step 9).
 
 *Real scale*
 
-- [ ] Open boundaries: velocity inlet, outflow, absorbing layers
+- [x] Open boundaries: velocity inlet, outflow, absorbing layers (Step 13)
 - [x] Wall model for rough surfaces (law of the wall with a roughness length): free-slip floors and a drag in the first cell of air (Step 11)
 - [x] A neutral atmospheric boundary layer over rough ground, in a box that repeats sideways: the mean wind follows the logarithmic law (Step 11: mixed results and numerical noise; Step 12: passes with the recursive collision and the wall model reading at 0.2 δ, fails when it reads the first cell)
 - [ ] The same boundary layer with open boundaries: it stays the same along the domain
@@ -1119,6 +1119,96 @@ One caution for later. Over a street between tall buildings, the wind 0.2 δ abo
 
 ---
 
+### 2026-10-29 · Step 13 · Open boundaries, and where to rent a graphics card
+
+**Goal.** Let the wind in at one end of the box and out at the other, without the ends disturbing the flow, and keep sound from bouncing back from them. And, as you asked, find a better place than Colab for long jobs on a graphics card, at a similar price.
+
+**Why.** Until now every box repeated sideways: air that left at one end came back at the other. That suits a boundary layer over endless flat ground (Step 11), but a real site has a wind coming in and a wake going out, and the wake must not come round again. Lesson [6.19](#619-boundaries-that-let-the-air-through) explains how a boundary that lets air through works.
+
+**What we did.**
+
+1. `Params(open_x=True)` opens the box along x: a velocity inlet at x = 0 and a pressure outlet at the last column (`lbm.open_boundaries`). The inlet finds its density from the packets (Zou and He 1997), fills in the missing packets by bouncing back their non-equilibrium part, and rebuilds the column from its density, velocity and stress, the way the collision builds packets. This is the "regularised" boundary of Latt et al. (2008) as we remember it; their paper could not be read here, so that attribution is marked UNVERIFIED in `docs/sources.md`. The outlet does the same with the density fixed at 1, and takes the sideways wind from the column before it.
+2. `absorb_cells` and `absorb_strength` add the absorbing layer before the outlet (A-012).
+3. The first test found a bug. A uniform wind at an angle, u = (0.05, 0.01, −0.02), should cross an open box unchanged, but its sideways part changed by 7 × 10⁻⁵. The boundary columns used the plain (second-order) equilibrium, while the recursive collision uses the extended one (Step 12). The two differ in moments of third order, such as u_x² u_y, which change sign with c_x, and the bounce-back turned that difference into a false stress. With the collision's own equilibrium, the change is 10⁻¹⁵: round-off.
+4. A benchmark of four tests, with its criteria written down before its first run, after trying tests 2 to 4 at the smallest size in a scratch folder (`benchmarks/wind_open.py`, `results/wind_open_cpu.json`).
+5. Prices of graphics cards from the providers' own price lists and live offers (`benchmarks/gpu_offers.py`, `results/gpu_offers.json`), a comparison (`docs/gpu_rental.md`), and a script that runs our jobs on any rented card (`scripts/gpu_run.sh`).
+
+**The tests, recorded.** All four pass, for D3Q27 with the recursive collision and for D3Q19 with the regularised one.
+
+*1. A uniform wind at an angle*, for every collision, with and without an absorbing layer: the density and the velocity stay the same to about 10⁻¹⁴ over 200 steps (criterion: 10⁻¹²).
+
+*2. A developed channel flow, fed through the inlet.* A channel driven by a body force, like gravity pulling the air along, is fed with the profile of the same channel made periodic; the open ends should not change it. The channel is 8, 16 and 32 cells across, with the wind slowed as the cells shrink, so that it is the same flow at every size (Reynolds number 4).
+
+| Cells across | Largest change, D3Q27; D3Q19 | In the middle third |
+| --- | --- | --- |
+| 8 | 0.15 %; 0.15 % | 0.003 %; 0.003 % |
+| 16 | 0.085 %; 0.10 % | 0.0002 %; 0.0005 % |
+| 32 | 0.056 %; 0.069 % | 0.00001 %; 0.00006 % |
+
+*Shares of the peak speed. Criteria: 1 % anywhere, 0.1 % in the middle third.*
+
+The largest change is always in the outlet column, and it shrinks slowly: by 1.5 to 1.8 times each time the cells are halved, while in the middle of the channel the change shrinks 7 to 16 times. Next to the outlet the profile flattens a little, and the air moves towards the walls to make room. That sideways wind is about 0.1 % of the peak speed at every size, but it fills a strip of two or three columns, which gets thinner as the cells shrink. The likely cause: bouncing back the non-equilibrium part is exact only for its second-order part, and the third-order part that the recursive collision keeps changes sign with c_x, so it comes back wrong. A boundary that worked out the stress from the known packets alone would avoid this. For now the error is small, and it sits where we do not look.
+
+*3. A channel driven by pressure.* No force this time: the inlet holds Poiseuille's parabola, the outlet the density 1, and the pressure difference between them pushes the air.
+
+| Cells across | Mass flux: spread along the channel, D3Q27; D3Q19 | Density's slope ÷ Poiseuille's law | Density at the inlet |
+| --- | --- | --- | --- |
+| 8 | 0.045 %; 0.039 % | 1.0023; 1.0023 | 1.062 |
+| 16 | 0.0031 %; 0.0027 % | 1.0005; 1.0005 | 1.015 |
+| 32 | 0.0002 %; 0.0002 % | 1.0001; 1.0001 | 1.004 |
+
+*Criteria: the same mass flux through every section to 0.1 %; the slope within 2 % of the law.*
+
+In this method the pressure is the density times c_s², so the push that drives the air is a density 6 % higher at the inlet than at the outlet, in the narrowest channel. The air is squeezed by that much (lesson [6.14](#614-a-slightly-squeezable-gas-the-mach-number)), and its speed rises by 6 % along the channel. That is why the law is checked with the mass flux, the density times the velocity, which is the same in every section. The flux keeps Poiseuille's shape within 0.25 %.
+
+*4. Sound.* A pulse of sound in a wind of 0.05, in a box of 96 cells. The share of its energy still in the box after 400 steps:
+
+| Absorbing layer | D3Q27, recursive | D3Q19, regularised |
+| --- | --- | --- |
+| none | 1.0 | 0.41 |
+| 8 columns, strength 0.05 | 0.37 | 0.15 |
+| 8 columns, strength 0.2 | 0.016 | 0.0061 |
+| 16 columns, strength 0.05 | 0.13 | 0.052 |
+| **16 columns, strength 0.2** | **0.00023** | **0.00010** |
+| 32 columns, strength 0.05 | 0.015 | 0.0065 |
+| 32 columns, strength 0.2 | 0.0000001 | 0.000003 |
+
+*Criterion: with 16 columns at strength 0.2, less than 0.001 is left, and at least 100 times less than with no layer.*
+
+Without a layer, the recursive collision keeps all the energy of the sound (still 97 % after 1600 steps): it bounces between the two ends. D3Q19's regularised collision loses 59 % in 400 steps by itself, because it relaxes the bulk stress fully every step (lesson [6.17](#617-the-collision-step-three-ways)), which damps sound strongly. Real air damps sound only weakly, so the recursive collision is the more realistic one, and it needs the absorbing layer.
+
+![Left: the energy of a sound pulse left in an open box over time, with and without absorbing layers. Right: the largest change of a developed channel flow along the channel, for three sizes](docs/images/wind_open.png)
+
+*D3Q27 with the recursive collision. Left: with no layer the sound stays (orange); the layer takes it out, faster when it is stronger or deeper. Right: the inlet column is exact and not drawn; the change is largest at the outlet, and in the middle it falls fast as the cells shrink. Dashed: the criteria. Simulated.*
+
+**Where to rent a graphics card.** The full comparison, with every source, is in `docs/gpu_rental.md`. In short:
+
+- Colab's hardware is not the problem. Its A100 80 GB is the cheapest 80 GB card per hour in the list: HK$77 buys 100 units, about 13 hours at 7.52 units an hour (a rate measured by McCormick in March 2026; you found about 14). The problem for long runs is its limits: at most 12 hours per runtime (24 with Pro+), runtimes "will time out if you are idle", and Google says Colab "prioritizes interactive compute".
+- Renting a whole machine by the hour, on RunPod or Vast.ai, gives a computer that runs until you stop it. On 2026-10-29 (`results/gpu_offers.json`): an RTX 4090 cost US$0.34 an hour on RunPod's Community Cloud, an RTX 3090 US$0.22 and an A100 80 GB US$1.19; on Vast.ai the median offers were US$0.50, US$0.24 and US$1.12.
+- What sets the solver's speed should be the card's memory bandwidth (lesson [6.18](#618-why-a-graphics-cards-speed-is-mostly-its-memorys-speed)). An RTX 4090 has about half the A100's bandwidth at less than half Colab's price per hour, so for HK$77 it should do about as much work: 29 hours of a 4090 against 13 hours of an A100.
+- Suggested: an RTX 4090 on RunPod for the next jobs, which all fit in its 24 GB, starting with the speed test alone, a quarter of an hour, which checks the bandwidth argument. Colab stays the place for jobs that need 80 GB. The choice is yours (open question 6).
+- `scripts/gpu_run.sh` runs the same jobs as the Colab notebook on any Linux machine with an NVIDIA card, under `nohup`, so that closing the browser does not stop it, and packs the results into the zip that `scripts/colab_unpack.py` checks. It was tested here with stand-ins for the graphics card and for `uv`, up to the point where JAX must see a real card, and then, with that check removed, its jobs and its packing on the processor.
+- Found on the way: since June 2026, Colab has a command-line tool that runs scripts on its cards without the browser (Linux and macOS only). Not tried yet.
+
+**What to understand.**
+
+- An open boundary is a guess about the air outside the box. Here the guess is exact for a uniform wind and close for a developed flow. It is least accurate right at the outlet, which is one more reason to keep the area we study far from it.
+- Sound and eddies must leave the box, not bounce back. With the recursive collision, which hardly damps sound, the absorbing layer is what makes an open box usable.
+- The price of an hour on a computer says little by itself: what counts is the work it does in that hour, which for this solver should follow the memory bandwidth. The speed test will tell.
+
+**Decisions.** D-020: open boundaries are rebuilt column by column with the collision's own equilibrium, with an absorbing layer before the outlet.
+
+**Problems and fixes.**
+
+- The false stress at the open boundaries in a wind at an angle (above).
+- A snapshot of the prices was cut short: its output was piped through `head`, which stopped the script before it wrote its file. Run again without `head`.
+- The first trial of the runner script used the real `uv` from the home folder, because the script puts `~/.local/bin` first in the search path, and it began a full installation. The trial now runs with an empty home folder.
+- Not everything could be read. Latt et al. (2008): the publisher refused the request, and the open copy did not load. Kaggle's free quota and the Colab units said to come with Google AI Pro: only third-party reports. All are marked UNVERIFIED in `docs/sources.md`.
+
+**Next.** The boundary layer through an open box, fed from a periodic one (the last boundary-layer item in Part 4). Then the cube's approach channel and the cube, which need the graphics card. The first run on a graphics card waits for your choice of where to run it.
+
+---
+
 ## Part 6 — Concepts explained simply
 
 These short lessons explain ideas the first time the project needs them. Later lessons build on earlier ones.
@@ -1240,6 +1330,14 @@ A graphics card has thousands of small calculators and a large memory beside the
 
 This gives a quick upper limit. A card whose memory moves 879 GB/s (an RTX 4090, as measured by Vast.ai) can update at most 879 × 10⁹ ÷ 216 ≈ 4 billion cells per second; a real step moves more than the minimum, so it is slower. If bandwidth is the limit, a 64-bit run, with twice the bytes, takes about twice as long. And it explains why the speed benchmark also times a plain copy of the packets: no step can beat it, and a step that takes only a few copy-times is limited by bandwidth. That is the test for whether a cheaper card with less bandwidth is a good buy (docs/gpu_rental.md).
 
+### 6.19 Boundaries that let the air through
+
+A simulation can only hold a box of air, but the real air goes on beyond it. A boundary that lets air through has to stand in for everything outside, and it must do so without disturbing what is inside.
+
+In the lattice Boltzmann method the problem is concrete. After streaming, each cell at the inlet is missing the packets that should have come in from outside, where there is no air in the simulation. What is known: the packets that came from inside, and what we decide at that boundary. At the inlet we decide the wind's velocity. Two facts then give the missing density: the packets must add up to the density, and their momentum along the flow must be the density times the chosen velocity (Zou and He 1997). Each missing packet is taken as the equilibrium plus the leftover of the packet moving the opposite way (the bounce-back of the non-equilibrium part), and finally the whole column is rebuilt from its density, velocity and stress, as the collision would build it. The outlet is the mirror image: there we decide the density, which in this method is the pressure, and the packets give the velocity.
+
+Such a boundary is exact for a uniform wind, but it reflects waves. For sound, an inlet that holds the velocity is like a wall, and an outlet that holds the pressure is like the open end of a flute: both send sound back into the box, where it bounces to and fro. Eddies that reach the outlet also leave a disturbance behind. So the last columns before the outlet are an *absorbing layer*: there, after each step, the packets are nudged part of the way towards the undisturbed wind, a little at the start of the layer and more towards the outlet, so that a wave fades as it goes in, and what reflects fades again on the way back. Absorbing layers are a common way to treat an outflow (Colonius 2004).
+
 (More lessons follow as the project reaches them: trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---
@@ -1266,6 +1364,7 @@ This gives a quick upper limit. A card whose memory moves 879 GB/s (an RTX 4090,
 | D-017 | D-009 is applied by the tool: uv ignores every release published after the date in `pyproject.toml` (`exclude-newer`), which is moved forward on purpose; npm packages are checked by script | A rule kept by memory failed: Pillow 13.0, a week old, came in unnoticed with another package |
 | D-018 | The wind solver uses D3Q27 with the recursive regularised collision by default; D3Q19 and the regularised and BGK collisions stay available for comparison | In a uniform wind with almost no viscosity, tiny noise grew until the run failed with every collision on D3Q19 and with the regularised and BGK collisions on D3Q27, in every direction; only the recursive collision on D3Q27 damped it, at Mach 0.17 and 0.25 (Step 12). It costs more per cell than D3Q19's step, which the graphics card will measure; a step that fails costs everything |
 | D-019 | Over flat, open ground, and in the boundary layer that feeds a site, the floors' wall model reads the wind at 0.2 times the depth of the boundary layer (A-011); among buildings it still reads the first cell, until a test decides | Read from the first cell, the mean wind missed the law of the wall by 10 to 19 %; read at 0.2 δ, a height taken from the literature before the run, it stayed within 3.3 % (Step 12). Among buildings the law of the wall may not hold that high above a street |
+| D-020 | Open boundaries: a velocity inlet and a pressure outlet, rebuilt column by column with the collision's own equilibrium and non-equilibrium parts (density or velocity from Zou and He 1997, bounce-back of the non-equilibrium part, then the rebuild), with an absorbing layer before the outlet (A-012) | Exact for a uniform wind with every collision; keeps a developed channel flow within 0.2 % of its peak speed and follows Poiseuille's law within 0.25 % (Step 13); one column on each side, so cheap. A boundary that works out the stress from the known packets alone, or a characteristic (non-reflecting) boundary, remains an option if a test needs it |
 | D-009 | Every package version is pinned exactly, and new versions are taken only after they have been out for about two weeks, unless a fix is needed | A build that worked keeps working; very new releases are where most broken or malicious packages are caught |
 
 ---

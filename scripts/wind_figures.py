@@ -15,7 +15,9 @@ writes
 - `docs/images/wind_abl.png`: the boundary layer of Step 11 (regularised collision);
 - `docs/images/wind_stability.png`, `wind_abl_noise.png`, `wind_abl_wall_model.png`: Step 12,
   the noise test, the boundary layer's noise before and after, and its mean wind with the
-  recursive collision and the wall model read from higher up.
+  recursive collision and the wall model read from higher up;
+- `docs/images/wind_open.png`: Step 13, a pulse of sound leaving an open box with and without
+  the absorbing layer, and how little the open boundaries change a developed channel flow.
 
 Colours: the first slots of the reference categorical palette of the dataviz guidance, on a
 light surface; text stays in neutral ink and every line is labelled directly.
@@ -419,6 +421,54 @@ def abl_noise(out: Path) -> None:
     plt.close(fig)
 
 
+def open_boundaries(out: Path) -> None:
+    """Step 13 (benchmarks/wind_open.py), D3Q27 with the recursive collision: the energy of a
+    sound pulse left in an open box, with and without the absorbing layer; and the largest
+    change, in each column, of a developed channel flow fed through the inlet."""
+    data = json.loads((ROOT / "results" / "wind_open_cpu.json").read_text())
+    fig, (left, right) = plt.subplots(1, 2, figsize=(8.6, 3.8), dpi=150, facecolor=SURFACE)
+    for ax in (left, right):
+        _style(ax)
+        ax.set_yscale("log")
+    wanted = [(0, 0.0, "no layer", SERIES[1]), (16, 0.05, "16 columns, strength 0.05", SERIES[3]),
+              (16, 0.2, "16 columns, strength 0.2", SERIES[0]),
+              (32, 0.2, "32 columns, strength 0.2", SERIES[2])]  # fmt: skip
+    for layer, strength, label, colour in wanted:
+        r = next(r for r in data["pulse"] if r["lattice"] == "D3Q27" and r["layer"] == layer
+                 and r["strength"] == strength)  # fmt: skip
+        steps = [0, *(int(k) for k in r["energy_left"])]
+        values = [1.0, *r["energy_left"].values()]
+        left.plot(steps, values, color=colour, linewidth=2, marker="o", markersize=3,
+                  label=label)  # fmt: skip
+    left.plot([300, 500], [1e-3, 1e-3], color=MUTED, linewidth=1.2, linestyle=(0, (4, 3)))
+    left.text(510, 1e-3, "criterion at\n400 steps", color=MUTED, fontsize=8, va="center")
+    left.set_xlabel("time steps", color=INK)
+    left.set_ylabel("energy left in the box ÷ at the start", color=INK)
+    left.set_title("A pulse of sound in an open box of 96 cells", color=INK, fontsize=10,
+                   loc="left")  # fmt: skip
+    left.legend(frameon=False, fontsize=8, labelcolor=INK, loc="lower left")
+    for r, colour in zip([r for r in data["forced_channel"] if r["lattice"] == "D3Q27"],
+                         SERIES, strict=False):  # fmt: skip
+        change = np.asarray(r["change_share_by_column"])[1:]  # the inlet column is exact
+        x = (np.arange(1, r["nx"]) + 0.5) / r["nx"]
+        right.plot(x, change, color=colour, linewidth=2, marker="o", markersize=2.5,
+                   label=f"{r['h']} cells across")  # fmt: skip
+    right.axhline(1e-2, color=MUTED, linewidth=1.2, linestyle=(0, (4, 3)))
+    right.plot([1 / 3, 2 / 3], [1e-3, 1e-3], color=MUTED, linewidth=1.2, linestyle=(0, (4, 3)))
+    right.text(0.02, 1.25e-2, "criterion: 1 % anywhere", color=MUTED, fontsize=8)
+    right.text(0.5, 1.25e-3, "0.1 % in the middle third", color=MUTED, fontsize=8, ha="center")
+    right.set_ylim(1e-9, 3e-2)
+    right.set_xlim(0, 1)
+    right.set_xlabel("position along the channel, inlet to outlet", color=INK)
+    right.set_ylabel("largest change ÷ peak speed", color=INK)
+    right.set_title("A developed channel flow, fed through the inlet", color=INK, fontsize=10,
+                    loc="left")  # fmt: skip
+    right.legend(frameon=False, fontsize=8, labelcolor=INK, loc="lower left")
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+
+
 def main() -> None:
     images = ROOT / "docs" / "images"
     lattices(images / "wind_lattices.png")
@@ -429,6 +479,7 @@ def main() -> None:
     noise_test(images / "wind_stability.png")
     abl_noise(images / "wind_abl_noise.png")
     abl_wall_model(images / "wind_abl_wall_model.png")
+    open_boundaries(images / "wind_open.png")
 
 
 if __name__ == "__main__":
