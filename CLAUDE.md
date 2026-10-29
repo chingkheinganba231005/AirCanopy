@@ -53,4 +53,6 @@ These rules apply to every working session, human or AI-assisted. The plan, the 
 | Pictures for the journal (from above; then of the running viewer) | `uv run python scripts/figures.py sites/NAME docs/images/NAME`; `node ui/scripts/screenshot.mjs http://127.0.0.1:PORT/ docs/images/NAME [--focus ID LABEL]` |
 | Measurements behind the journal's numbers | `uv run python benchmarks/<script>.py ...` → `results/*.json` (see each script's docstring) |
 | Wind solver against exact solutions; its speed | `uv run python benchmarks/wind_exact.py`; `uv run python benchmarks/wind_speed.py` |
+| GPU jobs on a rented card (RunPod, Vast.ai), under `nohup`; prices of rented cards | `bash scripts/gpu_run.sh [JOB ...]` (docs/gpu_rental.md); `uv run python benchmarks/gpu_offers.py` |
+| Check and copy in a zip of GPU results (from Colab or `gpu_run.sh`) | `uv run python scripts/colab_unpack.py aircanopy_gpu_results.zip` |
 | Pictures of the wind solver's tests (needs the `docs` group) | `uv run --group docs python scripts/wind_figures.py` |

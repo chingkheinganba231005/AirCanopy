@@ -280,7 +280,7 @@ P1 is done: its exit check is met (Step 9).
 - [ ] The cube's approach flow: a periodic channel whose wall friction is matched to the measured profile upstream of the cube (ERCOFTAC case 041, x/H = −18), used as the cube's inflow
 - [ ] Flow around a cube on the floor of a channel, against wind-tunnel measurements (Martinuzzi and Tropea 1993; data: ERCOFTAC case 041), with the pass criteria written down before the run, at two speeds (to measure the effect of the Mach number, Step 10)
 - [x] A Colab notebook that runs the large cases on a graphics card and records what it ran (`colab/wind_gpu.ipynb`, Step 11)
-- [ ] Its first run: speed on a graphics card, and the Taylor–Green vortex at 256³
+- [ ] Its first run: speed on a graphics card, and the Taylor–Green vortex at 256³ (on Colab, or on a rented card with `scripts/gpu_run.sh`: docs/gpu_rental.md)
 - [ ] Wind through the HKU site from one direction: mean wind speed 1.5 m above the ground, and streamlines, in the viewer, labelled *simulated*
 - [ ] Phase review
 
@@ -1234,6 +1234,12 @@ In each cell the collision nudges the packets towards a balanced mix, the *equil
 - **Regularised** keeps only the part that carries stress and rebuilds the packets from it, so the ghost modes are gone. But its equilibrium is right only up to the square of the wind speed, and it drops everything of higher order. Step 12 shows that this is not enough at almost zero viscosity in a fast wind.
 - **Recursive regularised** also rebuilds the higher orders, from the stress and the velocity, the way the theory of how a gas relaxes (the Chapman–Enskog expansion) says they follow. Its equilibrium is right to higher order too. On D3Q27 both parts can be written as products of one factor per direction (x, y and z), which makes the code short and cheap to run.
 
+### 6.18 Why a graphics card's speed is mostly its memory's speed
+
+A graphics card has thousands of small calculators and a large memory beside them. In one step of the wind solver, the 27 packets of every cell travel from the memory to the calculators and back: in 32-bit numbers, 27 × 4 bytes in and 27 × 4 bytes out, at least 216 bytes per cell. The arithmetic done with them, a few hundred additions and multiplications, usually takes the calculators less time than that trip. So the step's speed is set by how many bytes the memory moves per second, its *bandwidth*, more than by how fast the card calculates. Wellein, Zeiser, Hager and Donath (2006) found lattice Boltzmann programs on processors limited in the same way, by memory bandwidth or by peak arithmetic speed.
+
+This gives a quick upper limit. A card whose memory moves 879 GB/s (an RTX 4090, as measured by Vast.ai) can update at most 879 × 10⁹ ÷ 216 ≈ 4 billion cells per second; a real step moves more than the minimum, so it is slower. If bandwidth is the limit, a 64-bit run, with twice the bytes, takes about twice as long. And it explains why the speed benchmark also times a plain copy of the packets: no step can beat it, and a step that takes only a few copy-times is limited by bandwidth. That is the test for whether a cheaper card with less bandwidth is a good buy (docs/gpu_rental.md).
+
 (More lessons follow as the project reaches them: trees as porous clouds of leaves, how pollution moves and reacts, deposition, radiation and heat, comfort indices, surrogate models and neural operators, uncertainty, and multi-objective optimisation.)
 
 ---
@@ -1271,3 +1277,4 @@ In each cell the collision nudges the packets towards a balanced mix, the *equil
 3. **First demonstration place.** Hong Kong (near HKU), or somewhere else?
 4. **Commit email.** Commits use your GitHub noreply address. If you would rather use your personal email, say so.
 5. **Measured building heights for one city first?** In both test sites, a fifth to over a quarter of the building volume rests on heights guessed from neighbours (Step 9). Some cities publish measured 3D buildings under open licences. Adding one city (Hong Kong, where both test sites are) would fix this there, but only there, and take time away from the wind solver. Add one city now, or keep to worldwide sources until P2 is done?
+6. **Where to run graphics-card jobs.** `docs/gpu_rental.md` compares Colab with rented cards, at the prices of 2026-10-29. Suggested: RunPod's Community Cloud with an RTX 4090 for the next jobs, which fit in its 24 GB (for HK$77, about 29 hours, with no 12-hour limit and no idle timeouts), and Colab's A100 80 GB later, for jobs that need 80 GB. Or stay with Colab for everything. Which do you prefer?

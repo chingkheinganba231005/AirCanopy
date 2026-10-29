@@ -64,6 +64,29 @@ checked. Anything that could not be checked is marked `UNVERIFIED`.
 | Growth of tiny noise in a uniform wind with almost no viscosity, for each collision and lattice | Our own computation, `benchmarks/wind_stability.py` → `results/wind_stability_cpu.json` | 2026-10-24 |
 | The Taylor–Green vortex at Reynolds number 1600 on the processor | Our own computation, `benchmarks/wind_tgv1600.py` → `results/wind_tgv1600_cpu.json` | 2026-10-24 |
 
+## Graphics-card services
+
+Prices and limits behind `docs/gpu_rental.md`. Prices change; each row gives the day it was read.
+
+| What we use | Source | Checked |
+| --- | --- | --- |
+| RunPod's list prices per card and cloud, and stock levels; Vast.ai's open on-demand offers with one card, their prices and the memory bandwidth Vast.ai measured on each machine | Our own snapshot through their public interfaces, `https://api.runpod.io/graphql` (`gpuTypes`) and `https://console.vast.ai/api/v0/bundles/`, by `benchmarks/gpu_offers.py` → `results/gpu_offers.json` (2026-10-29T02:57:29Z) | 2026-10-29 |
+| RunPod's prices as shown on its page (the same numbers as its interface), storage prices ($0.10/GB/month container disk; volume disk $0.10 running, $0.20 idle; network storage $0.07/GB/month under 1 TB) | `https://www.runpod.io/pricing` | 2026-10-29 |
+| On RunPod, `runpodctl pod stop $RUNPOD_POD_ID` stops a pod; stopping "releases the GPU" and keeps `/workspace`; "Container disk data is cleared"; a stopped pod's volume disk is still billed | RunPod documentation, "Manage Pods", `https://docs.runpod.io/pods/manage-pods` | 2026-10-29 |
+| Vast.ai on-demand rentals have "Guaranteed uptime", per-second billing and no interruptions; interruptible ones are "50%+ cheaper" and "may be reclaimed"; prices are "set by supply and demand" | `https://vast.ai/pricing` | 2026-10-29 |
+| Colab: "notebooks can run for at most 12 hours"; Pro+ allows "continuous code execution for up to 24 hours"; "Runtimes will time out if you are idle"; "Colab prioritizes interactive compute" | Google, Colab FAQ, `https://research.google.com/colaboratory/faq.html` | 2026-10-29 |
+| Colab units used per hour: A100 80 GB 7.52 (US$0.75), A100 40 GB 5.40, L4 1.71, T4 1.19, G4 (RTX PRO 6000, about 96 GB) 8.71, measured 2026-03-10; units cost US$10 per 100; the 80 GB A100 is chosen with the "High RAM" setting. Google does not publish these rates: this is one person's measurement | C. McCormick, "Colab GPUs Features & Pricing", updated March 2026, `https://mccormickml.com/2024/04/23/colab-gpus-features-and-pricing/` | 2026-10-29 |
+| The Colab command-line tool (`colab new`, `exec`, `console`, `ssh`, `download`, `stop`); Apache-2.0; Linux and macOS only ("Windows is not supported at this time"); `--high-mem` needs Colab Pro or Pro+ | S. Shumway, T. Pirtle and S. Troisi, "Introducing the Google Colab CLI", Google Developers Blog, 2026-06-05, `https://developers.googleblog.com/introducing-the-google-colab-cli/`; README of `https://github.com/googlecolab/google-colab-cli` | 2026-10-29 |
+| Google AI Pro includes 200 Colab units a month | UNVERIFIED: only news reports (INSIDE, 2026-09-27, `https://www.inside.com.tw/article/42497-google-ai-pro-colab-200-compute-units-a100-cli`); no Google page found | 2026-10-29 |
+| Kaggle's free GPU quota (about 30 h a week, sessions up to 12 h) | UNVERIFIED: third-party summaries only; Kaggle does not publish the quota | 2026-10-29 |
+| Thunder Compute: A100 80 GB $1.09/h, RTX A6000 $0.35/h, H100 SXM $3.20/h, billed per minute, not preempted; PyTorch and CUDA 13 preinstalled; JAX not mentioned | `https://www.thundercompute.com/pricing`; `https://www.thundercompute.com/docs/technical-specs.md` | 2026-10-29 |
+| Modal: A100 80 GB $0.000694/s ($2.50/h); Starter plan $30 of free credit a month; a function runs for at most 24 hours | `https://modal.com/pricing`; `https://modal.com/docs/guide/timeouts` | 2026-10-29 |
+| Lambda: one A100 40 GB $1.99/h; the A100 80 GB only in groups of eight ($2.79 per card) | `https://lambda.ai/pricing` | 2026-10-29 |
+| A100 80 GB memory bandwidth: 1,935 GB/s (PCIe), 2,039 GB/s (SXM); FP64 9.7 TFLOPS, FP32 19.5 TFLOPS | NVIDIA, A100 product page, `https://www.nvidia.com/en-us/data-center/a100/` | 2026-10-29 |
+| JAX with CUDA 12 supports cards of compute capability 5.2 or newer (CUDA 13: 7.5 or newer); driver at least 525 (CUDA 12) or 580 (CUDA 13); Linux only | JAX installation guide, `https://docs.jax.dev/en/latest/installation.html` | 2026-10-29 |
+| The Hong Kong dollar is held "within a band of HK$7.75-7.85 to one US dollar" | Hong Kong Monetary Authority, "Linked Exchange Rate System", `https://www.hkma.gov.hk/eng/key-functions/money/linked-exchange-rate-system/` | 2026-10-29 |
+| Lattice Boltzmann kernels are limited by memory bandwidth or by peak arithmetic speed, and their data layout matters more than cache tricks | G. Wellein, T. Zeiser, G. Hager and S. Donath, "On the single processor performance of simple lattice Boltzmann kernels", Computers & Fluids 35(8-9):910-919 (2006) (the FAU database gives this author order; T. Zeiser's publication list puts Donath before Hager). Read from the abstract and summaries; the full text was not read | 2026-10-29 |
+
 ## Software
 
 Licences from the PyPI metadata of each package.
