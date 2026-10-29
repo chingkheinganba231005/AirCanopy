@@ -1,0 +1,307 @@
+{
+  "what": "hourly prices of one graphics card: RunPod's list prices, and the verified, rentable, on-demand single-GPU offers on Vast.ai, at one moment",
+  "run_at": "2026-10-29T02:57:29Z",
+  "runpod": {
+    "source": "https://api.runpod.io/graphql",
+    "models": [
+      {
+        "model": "RTX 3090",
+        "id": "NVIDIA GeForce RTX 3090",
+        "listed": true,
+        "memory_gb": 24,
+        "secure_usd_per_hour": 0.5,
+        "community_usd_per_hour": 0.22,
+        "stock": null
+      },
+      {
+        "model": "RTX 4090",
+        "id": "NVIDIA GeForce RTX 4090",
+        "listed": true,
+        "memory_gb": 24,
+        "secure_usd_per_hour": 0.89,
+        "community_usd_per_hour": 0.34,
+        "stock": "Low"
+      },
+      {
+        "model": "RTX 5090",
+        "id": "NVIDIA GeForce RTX 5090",
+        "listed": true,
+        "memory_gb": 32,
+        "secure_usd_per_hour": 1.19,
+        "community_usd_per_hour": 0.69,
+        "stock": "Low"
+      },
+      {
+        "model": "RTX A6000",
+        "id": "NVIDIA RTX A6000",
+        "listed": true,
+        "memory_gb": 48,
+        "secure_usd_per_hour": 0.59,
+        "community_usd_per_hour": 0.33,
+        "stock": "Low"
+      },
+      {
+        "model": "L40S",
+        "id": "NVIDIA L40S",
+        "listed": true,
+        "memory_gb": 48,
+        "secure_usd_per_hour": 1.09,
+        "community_usd_per_hour": 0.79,
+        "stock": "Medium"
+      },
+      {
+        "model": "A100 PCIE",
+        "id": "NVIDIA A100 80GB PCIe",
+        "listed": true,
+        "memory_gb": 80,
+        "secure_usd_per_hour": 1.79,
+        "community_usd_per_hour": 1.19,
+        "stock": "Low"
+      },
+      {
+        "model": "A100 SXM4",
+        "id": "NVIDIA A100-SXM4-80GB",
+        "listed": true,
+        "memory_gb": 80,
+        "secure_usd_per_hour": 1.79,
+        "community_usd_per_hour": 1.39,
+        "stock": "Low"
+      },
+      {
+        "model": "H100 PCIE",
+        "id": "NVIDIA H100 PCIe",
+        "listed": true,
+        "memory_gb": 80,
+        "secure_usd_per_hour": 2.89,
+        "community_usd_per_hour": 1.99,
+        "stock": "Low"
+      },
+      {
+        "model": "H100 SXM",
+        "id": "NVIDIA H100 80GB HBM3",
+        "listed": true,
+        "memory_gb": 80,
+        "secure_usd_per_hour": 3.99,
+        "community_usd_per_hour": 2.69,
+        "stock": "Medium"
+      }
+    ]
+  },
+  "vast": {
+    "source": "https://console.vast.ai/api/v0/bundles/",
+    "models": [
+      {
+        "model": "RTX 3090",
+        "min_gpu_ram_gb": 20,
+        "offers": 34,
+        "usd_per_hour": {
+          "min": 0.143,
+          "median": 0.239,
+          "max": 0.789,
+          "quartiles": [
+            0.208,
+            0.401
+          ]
+        },
+        "interruptible_min_bid_usd_per_hour": 0.084,
+        "measured_bandwidth_gb_s_median": 805,
+        "reliability_median": 0.991,
+        "countries": [
+          "AE",
+          "AR",
+          "BG",
+          "CA",
+          "CL",
+          "CN",
+          "CZ",
+          "ES",
+          "FR",
+          "ID",
+          "JO",
+          "KW",
+          "NL",
+          "NO",
+          "PL",
+          "RO",
+          "RS",
+          "TH",
+          "TR",
+          "TW",
+          "US",
+          "ZA"
+        ]
+      },
+      {
+        "model": "RTX 4090",
+        "min_gpu_ram_gb": 20,
+        "offers": 55,
+        "usd_per_hour": {
+          "min": 0.376,
+          "median": 0.498,
+          "max": 2.002,
+          "quartiles": [
+            0.464,
+            0.674
+          ]
+        },
+        "interruptible_min_bid_usd_per_hour": 0.267,
+        "measured_bandwidth_gb_s_median": 879,
+        "reliability_median": 0.994,
+        "countries": [
+          "CA",
+          "CN",
+          "DK",
+          "EE",
+          "ES",
+          "FR",
+          "GB",
+          "HU",
+          "JP",
+          "MD",
+          "MY",
+          "NO",
+          "PL",
+          "RO",
+          "SE",
+          "TR",
+          "TW",
+          "US",
+          "VN"
+        ]
+      },
+      {
+        "model": "RTX 5090",
+        "min_gpu_ram_gb": 28,
+        "offers": 51,
+        "usd_per_hour": {
+          "min": 0.476,
+          "median": 0.895,
+          "max": 3.335,
+          "quartiles": [
+            0.794,
+            1.135
+          ]
+        },
+        "interruptible_min_bid_usd_per_hour": 0.278,
+        "measured_bandwidth_gb_s_median": 1455,
+        "reliability_median": 0.993,
+        "countries": [
+          "BG",
+          "CA",
+          "CN",
+          "CZ",
+          "DE",
+          "DK",
+          "EE",
+          "ES",
+          "FR",
+          "HU",
+          "IT",
+          "KR",
+          "NL",
+          "SK",
+          "TH",
+          "TW",
+          "US"
+        ]
+      },
+      {
+        "model": "RTX A6000",
+        "min_gpu_ram_gb": 40,
+        "offers": 6,
+        "usd_per_hour": {
+          "min": 0.403,
+          "median": 0.484,
+          "max": 0.869,
+          "quartiles": [
+            0.444,
+            0.513
+          ]
+        },
+        "interruptible_min_bid_usd_per_hour": 0.267,
+        "measured_bandwidth_gb_s_median": 651,
+        "reliability_median": 0.994,
+        "countries": [
+          "ES",
+          "RO",
+          "US",
+          "VN"
+        ]
+      },
+      {
+        "model": "L40S",
+        "min_gpu_ram_gb": 40,
+        "offers": 6,
+        "usd_per_hour": {
+          "min": 0.536,
+          "median": 0.636,
+          "max": 0.804,
+          "quartiles": [
+            0.536,
+            0.786
+          ]
+        },
+        "interruptible_min_bid_usd_per_hour": 0.4,
+        "measured_bandwidth_gb_s_median": 626,
+        "reliability_median": 0.985,
+        "countries": [
+          "ES",
+          "FI",
+          "TR",
+          "TW",
+          "ZA"
+        ]
+      },
+      {
+        "model": "A100 PCIE",
+        "min_gpu_ram_gb": 70,
+        "offers": 0
+      },
+      {
+        "model": "A100 SXM4",
+        "min_gpu_ram_gb": 70,
+        "offers": 8,
+        "usd_per_hour": {
+          "min": 1.002,
+          "median": 1.123,
+          "max": 1.3,
+          "quartiles": [
+            1.086,
+            1.217
+          ]
+        },
+        "interruptible_min_bid_usd_per_hour": 0.267,
+        "measured_bandwidth_gb_s_median": 1664,
+        "reliability_median": 0.992,
+        "countries": [
+          "CZ",
+          "FR",
+          "SE",
+          "TW",
+          "US"
+        ]
+      },
+      {
+        "model": "H100 PCIE",
+        "min_gpu_ram_gb": 70,
+        "offers": 0
+      },
+      {
+        "model": "H100 SXM",
+        "min_gpu_ram_gb": 70,
+        "offers": 1,
+        "usd_per_hour": {
+          "min": 5.829,
+          "median": 5.829,
+          "max": 5.829
+        },
+        "interruptible_min_bid_usd_per_hour": 2.667,
+        "measured_bandwidth_gb_s_median": 2880,
+        "reliability_median": 0.999,
+        "countries": [
+          "US"
+        ]
+      }
+    ]
+  }
+}
